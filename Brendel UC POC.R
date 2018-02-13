@@ -1,6 +1,5 @@
 # A Regression weighting approach to uncontrolled confounding
 # by Paul Brendel
-# 1. Demonstration
 
 # Create expit function
 
