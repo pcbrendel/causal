@@ -1,4 +1,4 @@
-# A Regression weighting approach to misclassification bias
+# Adjustment for Exposure Misclassification
 # by Paul Brendel
 
 # Create data --------------------------------------------------------------------------------------
