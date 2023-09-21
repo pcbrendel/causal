@@ -1,7 +1,11 @@
-# R code for bias analysis
+# R code for bias analysis tutorials and developing mew methods
 
-Files:
+* Uncontrolled Confounding - uc_tutorial.R
+* Selection Bias - sel_tutorial.R
+* Exposure Misclassification - emc_tutorial.R
+* Outcome Misclassification - omc_tutorial.R
 
-* Uncontrolled Confounding - Proof of Concept = "Brendel UC POC.R"
-* Selection Bias - Proof of Concept = "Brendel Sel POC.R"
-* Misclassification Bias - Proof of Concept = "Brendel MC POC.R"
+TO DO:
+* Include both imputation and weighting approaches
+* Outcome Misclassification
+* Continuous variables
