@@ -7,10 +7,10 @@ library(tidyverse)
 set.seed(1234)
 n <- 100000
 
-c <- rbinom(n, 1, .5)
-u <- rbinom(n, 1, .5)
-x <- rbinom(n, 1, plogis(-.5 + .5 * c + 1.5 * u))
-y <- rbinom(n, 1, plogis(-.5 + log(2) * x + .5 * c + 1.5 * u))
+c <- rbinom(n, 1, 0.5)
+u <- rbinom(n, 1, 0.5)
+x <- rbinom(n, 1, plogis(-0.5 + 0.5 * c + 1.5 * u))
+y <- rbinom(n, 1, plogis(-0.5 + log(2) * x + 0.5 * c + 1.5 * u))
 
 df <- data.frame(X = x, Y = y, C = c, U = u)
 rm(x, y, c, u)
@@ -20,11 +20,9 @@ rm(x, y, c, u)
 nobias_model <- glm(Y ~ X + C + U,
                     family = binomial(link = "logit"),
                     data = df)
-exp(summary(nobias_model)$coef[2, 1])
-c(exp(summary(nobias_model)$coef[2, 1] +
-        summary(nobias_model)$coef[2, 2] * qnorm(.025)),
-  exp(summary(nobias_model)$coef[2, 1] +
-        summary(nobias_model)$coef[2, 2] * qnorm(.975)))
+exp(coef(nobias_model)[2])
+c(exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.025)),
+  exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.975)))
 # 2.02 (1.96, 2.09)
 
 bias_model <- glm(Y ~ X + C,
@@ -56,11 +54,12 @@ adjust_uc_imp_loop <- function(
     # bootstrap sample
     bdf <- df[sample(seq_len(n), n, replace = TRUE), ]
 
-    # impute U
+    # impute u
     bdf$Upred <- rbinom(n, 1, plogis(coef_0 + coef_x * bdf$X +
                                        coef_c * bdf$C + coef_y * bdf$Y))
 
-    final_model <- glm(Y ~ X + C + Upred, family = binomial(link = "logit"),
+    final_model <- glm(Y ~ X + C + Upred,
+                       family = binomial(link = "logit"),
                        data = bdf)
     est[i] <- exp(coef(final_model)[2])
   }

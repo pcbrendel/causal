@@ -1,78 +1,97 @@
-# A Regression weighting approach to selection bias
-# by Paul Brendel
+# Adjusting for Selection Bias
 
-# Create data --------------------------------------------------------------------------------------
+library(tidyverse)
+
+# DERIVE DATA
 
 set.seed(1234)
 n <- 100000
 
-C <- rbinom(n, 1, .5)
-X  <- rbinom(n, 1, plogis(-.5 + .5 * C))
-Y  <- rbinom(n, 1, plogis(-.5 + log(2) * X + .5 * C))
-S <- rbinom(n, 1, plogis(-.5 + 1.5 * X + 1.5 * Y))
+c <- rbinom(n, 1, .5)
+x  <- rbinom(n, 1, plogis(-.5 + .5 * c))
+y  <- rbinom(n, 1, plogis(-.5 + log(2) * x + .5 * c))
+s <- rbinom(n, 1, plogis(-.5 + 1.5 * x + 1.5 * y))
 
-#note that P(Y=1|X=1,C=c,U=u)/P(Y=1|X=0,C=c,U=u) should equal expit(log(2))
-#thus odds(Y=1|X=1,C=c,U=u)/odds(Y=1|X=0,C=c,U=u) = ORyx = exp(log(2)) = 2
+df <- data.frame(X = x, Y = y, C = c, S = s)
+rm(c, x, y, s)
 
-df <- data.frame(X, Y, C, S)
-rm(C, X, Y, S)
+# INSPECT MODELS
 
-# Compare biased model to bias-free model ------------------------------------------------------------
+nobias_model <- glm(Y ~ X + C,
+                    family = binomial(link = "logit"),
+                    data = df)
+exp(coef(nobias_model)[2])
+c(exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.025)),
+  exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.975)))
+# 2.04 (1.99, 2.09)
 
-no_bias <- glm(Y ~ X + C, family = binomial(link = "logit"), data = df) #model with no bias
-exp(coef(no_bias)[2])
-exp(coef(no_bias)[2] + summary(no_bias)$coef[2, 2] * qnorm(.025))
-exp(coef(no_bias)[2] + summary(no_bias)$coef[2, 2] * qnorm(.975))
-#ORyx = 2.04 (1.99, 2.09)
+bias_model <- glm(Y ~ X + C,
+                  family = binomial(link = "logit"),
+                  data = df[sample(seq_len(n), n, replace = TRUE, df$S), ])
+exp(coef(bias_model)[2])
+c(exp(coef(bias_model)[2] + summary(bias_model)$coef[2, 2] * qnorm(.025)),
+  exp(coef(bias_model)[2] + summary(bias_model)$coef[2, 2] * qnorm(.975)))
+# 1.34 (1.31, 1.38)
 
-sel_bias <- glm(Y ~ X + C, family = binomial(link="logit"), 
-                data = df[sample(1:nrow(df), n, replace = TRUE, df$S),])
-exp(coef(sel_bias)[2])
-exp(coef(sel_bias)[2] + summary(sel_bias)$coef[2, 2] * qnorm(.025))
-exp(coef(sel_bias)[2] + summary(sel_bias)$coef[2, 2] * qnorm(.975))
-#ORyx = 1.32 (1.29, 1.36)
-
-# Model P(S=1|X,Y) and obtain regression parameters ----------------------------------------------------
+# OBTAIN BIAS PARAMETERS
 
 s_model <- glm(S ~ X + Y, data = df, family = binomial(link = "logit"))
-S0 <- coef(s_model)[1] 
-S1 <- coef(s_model)[2] 
-S2 <- coef(s_model)[3] 
+summary(s_model)
 
-# Create bootstrap function ---------------------------------------------------------------------------
+# ADJUST
 
-fun <- function (cS, cSX, cSY) {
-  set.seed(1234)
+adjust_sel_loop <- function(
+  coef_0, coef_x, coef_y, nreps, plot = FALSE
+) {
+
   est <- vector()
-  nreps <- 10 #can vary number of bootstrap samples
-  
-  for(i in 1:nreps){
-    bdf <- df[sample(1:nrow(df), n, replace = TRUE, df$S), ] #random samping with replacement among S=1
-    
-    pS <- plogis(cS + cSX * bdf$X + cSY * bdf$Y) #model the probability of S
-    
-    final <- glm(Y ~ X + C, family = binomial(link = "logit"), weights = (1/pS), data = bdf)
-    est[i] <- coef(final)[2]
+  for (i in 1:nreps){
+
+    bdf <- df[sample(seq_len(n), n, replace = TRUE, df$S), ]
+
+    prob_s <- plogis(coef_0 + coef_x * bdf$X + coef_y * bdf$Y)
+
+    final_model <- glm(Y ~ X + C,
+                       family = binomial(link = "logit"),
+                       weights = (1 / prob_s),
+                       data = bdf)
+    est[i] <- exp(coef(final_model)[2])
   }
-  
-  out <- list(exp(median(est)), exp(quantile(est, c(.025, .975))), hist(exp(est)))
+
+  out <- list(
+    estimate = round(median(est), 2),
+    ci = round(quantile(est, c(.025, .975)), 2)
+  )
+
+  if (plot) {
+    out$hist <- hist(exp(est))
+  }
+
   return(out)
 }
 
-# Apply functions ------------------------------------------------------------------------------------
+# using known, correct bias parameters
+set.seed(1234)
+correct_results <- adjust_sel_loop(
+  coef_0 = coef(s_model)[1],
+  coef_x = coef(s_model)[2],
+  coef_y = coef(s_model)[3],
+  nreps = 10
+)
 
-# Known, correct bias parameters 
+correct_results$estimate
+correct_results$ci
+# 2.05 (2.01, 2.07)
 
-fun(cS = S0, cSX = S1, cSY = S2)
-# ORyx = 2.05 (2.01, 2.07)
+# using incorret bias parameters
+set.seed(1234)
+incorrect_results <- adjust_sel_loop(
+  coef_0 = coef(s_model)[1] * 2,
+  coef_x = coef(s_model)[2] * 2,
+  coef_y = coef(s_model)[3] * 2,
+  nreps = 10
+)
 
-# Incorret bias parameters
-
-# Double each bias parameter
-fun(cS = 2 * S0, cSX = 2 * S1, cSY = 2 * S2)
-# ORyx = 3.91 (3.84, 3.96)
-
-
-
-
-
+incorrect_results$estimate
+incorrect_results$ci
+# 3.92 (3.84, 3.96)

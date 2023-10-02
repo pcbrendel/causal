@@ -1,84 +1,164 @@
-# Adjustment for Exposure Misclassification
-# by Paul Brendel
+# Adjusting for Exposure Misclassification
 
-# Create data --------------------------------------------------------------------------------------
+library(tidyverse)
+
+# DERIVE DATA
 
 set.seed(1234)
 n <- 100000
 
-C <- rbinom(n, 1, .5)
-X  <- rbinom(n, 1, plogis(-.5 + .5 * C))
-Y  <- rbinom(n, 1, plogis(-.5 + log(2) * X + .5 * C))
-Xstar <- ifelse(X == 1 & Y == 1, rbinom(n, 1, .75), 
-                (ifelse(X == 1 & Y == 0, rbinom(n, 1, .65),
-                        (ifelse(X == 0 & Y == 1, rbinom(n, 1, .25), rbinom(n, 1, .35))))))
+c <- rbinom(n, 1, .5)
+x  <- rbinom(n, 1, plogis(-.5 + .5 * c))
+y  <- rbinom(n, 1, plogis(-.5 + log(2) * x + .5 * c))
+xstar <- rbinom(n, 1, plogis(-1 + log(5) * x + log(1.25) * y))
 
-#note that P(Y=1|X=1,C=c,U=u)/P(Y=1|X=0,C=c,U=u) should equal expit(log(2))
-#thus odds(Y=1|X=1,C=c,U=u)/odds(Y=1|X=0,C=c,U=u) = ORyx = exp(log(2)) = 2
+df <- data.frame(X = x, Y = y, C = c, Xstar = xstar)
+rm(c, x, y, xstar)
 
-df <- data.frame(X, Xstar, Y, C)
-rm(C, X, Y, Xstar)
+# INSPECT MODELS
 
-# Compare biased model to bias-free model ------------------------------------------------------------
+nobias_model <- glm(Y ~ X + C, family = binomial(link = "logit"), data = df)
+exp(coef(nobias_model)[2])
+exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.025))
+exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.975))
+# 2.04 (1.99, 2.09)
 
-no_bias <- glm(Y ~ X + C, family = binomial(link = "logit"), data = df) #model with no bias
-exp(coef(no_bias)[2])
-exp(coef(no_bias)[2] + summary(no_bias)$coef[2, 2] * qnorm(.025))
-exp(coef(no_bias)[2] + summary(no_bias)$coef[2, 2] * qnorm(.975))
-#ORyx = 2.04 (1.99, 2.09)
+bias_model <- glm(Y ~ Xstar + C, family = binomial(link = "logit"), data = df)
+exp(coef(bias_model)[2])
+exp(coef(bias_model)[2] + summary(bias_model)$coef[2, 2] * qnorm(.025))
+exp(coef(bias_model)[2] + summary(bias_model)$coef[2, 2] * qnorm(.975))
+# 1.61 (1.57, 1.65)
 
-mc_bias <- glm(Y ~ Xstar + C, family = binomial(link = "logit"), data = df) #model with misclassification bias
-exp(coef(mc_bias)[2])
-exp(coef(mc_bias)[2] + summary(mc_bias)$coef[2, 2] * qnorm(.025))
-exp(coef(mc_bias)[2] + summary(mc_bias)$coef[2, 2] * qnorm(.975))
-#ORyx = 1.27 (1.24, 1.31)
+# OBTAIN BIAS PARAMETERS
 
-# Model P(X=1|Xstar,C,Y) and obtain regression parameters -----------------------------------------------
+x_model <- glm(X ~ Xstar + Y + C, family = binomial(link = "logit"), data = df)
+summary(x_model)
 
-x_model <- glm(X ~ Xstar + C + Y, family = binomial(link = "logit"), data = df)
-X0 <- coef(x_model)[1]
-X1 <- coef(x_model)[2]
-X2 <- coef(x_model)[3]
-X3 <- coef(x_model)[4]
+# ADJUST
 
-# Create bootstrap function --------------------------------------------------------------------------
+# imputation approach
+adjust_emc_imp_loop <- function(
+  coef_0, coef_xstar, coef_y, coef_c, nreps, plot = FALSE
+) {
 
-fun <- function (x1_0, x1_xstar, x1_c, x1_y) {
-  set.seed(1234)
   est <- vector()
-  nreps <- 10 #can vary number of bootstrap samples
-  
-  for(i in 1:nreps){
-    bdf <- df[sample(1:nrow(df), n, replace = TRUE), ] #random samping with replacement
-    
-    pX <- plogis(x1_0 + x1_xstar * bdf$Xstar + x1_c * bdf$C + x1_y * bdf$Y) #model the probability of X
-    
-    combined <- bdf[rep(seq_len(nrow(bdf)), 2), ] #duplicate data
-    combined$Xsim <- rep(c(1, 0), each = n) #Xsim=1 in first copy, Xsim=0 in second copy
-    combined$pX <- c(pX, 1 - pX) #when Xsim=1, pX is prob of X=1; when Xsim=0, pX is prob of X=0
-    
-    final <- glm(Y ~ Xsim + C, family = binomial(link = "logit"), weights = pX, data = combined)
-    est[i] <- coef(final)[2]
+  for (i in 1:nreps) {
+
+    bdf <- df[sample(seq_len(n), n, replace = TRUE), ]
+
+
+    bdf$Xpred <- rbinom(
+      n, 1, plogis(coef_0 + coef_xstar * bdf$Xstar +
+                     coef_y * bdf$Y + coef_c * bdf$C)
+    )
+
+    final_model <- glm(Y ~ Xpred + C,
+                       family = binomial(link = "logit"),
+                       data = bdf)
+    est[i] <- exp(coef(final_model)[2])
   }
-  
-  out <- list(exp(median(est)), exp(quantile(est, c(.025, .975))), hist(exp(est)))
+
+  out <- list(
+    estimate = round(median(est), 2),
+    ci = round(quantile(est, c(.025, .975)), 2)
+  )
+
+  if (plot) {
+    out$hist <- hist(exp(est))
+  }
+
   return(out)
+
 }
 
-# Apply functions ------------------------------------------------------------------------------------
+# using known, correct bias parameters
+set.seed(1234)
+correct_results <- adjust_emc_imp_loop(
+  coef_0 =     coef(x_model)[1],
+  coef_xstar = coef(x_model)[2],
+  coef_y =     coef(x_model)[3],
+  coef_c =     coef(x_model)[4],
+  nreps = 10
+)
 
-# Known, correct bias parameters 
+correct_results$estimate
+correct_results$ci
+# 2.04 (2.01, 2.08)
 
-fun(x1_0 = X0, x1_xstar = X1, x1_c = X2, x1_y = X3)
-# ORyx = 2.04 (2.03, 2.05)
+# using incorret bias parameters
+set.seed(1234)
+incorrect_results <- adjust_emc_imp_loop(
+  coef_0 =     coef(x_model)[1] * 2,
+  coef_xstar = coef(x_model)[2] * 2,
+  coef_y =     coef(x_model)[3] * 2,
+  coef_c =     coef(x_model)[4] * 2,
+  nreps = 10
+)
 
-# Incorret bias parameters
+incorrect_results$estimate
+incorrect_results$ci
+# 2.85 (2.80, 2.89)
 
-# Double each bias parameter
-fun(x1_0 = 2*X0, x1_xstar = 2*X1, x1_c = 2*X2, x1_y = 2*X3)
-# ORyx = 2.69 (2.67, 2.71)
+# weighting approach
+adjust_emc_wgt_loop <- function(
+  coef_0, coef_xstar, coef_y, coef_c, nreps, plot = FALSE
+) {
 
+  est <- vector()
+  for (i in 1:nreps) {
 
+    bdf <- df[sample(seq_len(n), n, replace = TRUE), ]
 
+    x_probability <- plogis(
+      coef_0 + coef_xstar * bdf$Xstar + coef_y * bdf$Y + coef_c * bdf$C
+    )
 
+    combined <- dplyr::bind_rows(bdf, bdf)
+    combined$Xbar <- rep(c(1, 0), each = n)
+    combined$x_weight <- c(x_probability, 1 - x_probability)
 
+    final_model <- glm(Y ~ Xbar + C, family = binomial(link = "logit"),
+                       data = combined, weights = combined$x_weight)
+    est[i] <- exp(coef(final_model)[2])
+  }
+
+  out <- list(
+    estimate = round(median(est), 2),
+    ci = round(quantile(est, c(.025, .975)), 2)
+  )
+
+  if (plot) {
+    out$hist <- hist(exp(est))
+  }
+
+  return(out)
+
+}
+
+# using known, correct bias parameters
+set.seed(1234)
+correct_results <- adjust_emc_wgt_loop(
+  coef_0 =     coef(x_model)[1],
+  coef_xstar = coef(x_model)[2],
+  coef_y =     coef(x_model)[3],
+  coef_c =     coef(x_model)[4],
+  nreps = 10
+)
+
+correct_results$estimate
+correct_results$ci
+# 2.05 (2.04, 2.06)
+
+# using incorret bias parameters
+set.seed(1234)
+incorrect_results <- adjust_emc_wgt_loop(
+  coef_0 =     coef(x_model)[1] * 2,
+  coef_xstar = coef(x_model)[2] * 2,
+  coef_y =     coef(x_model)[3] * 2,
+  coef_c =     coef(x_model)[4] * 2,
+  nreps = 10
+)
+
+incorrect_results$estimate
+incorrect_results$ci
+# 2.85 (2.84, 2.88)
