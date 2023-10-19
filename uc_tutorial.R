@@ -25,19 +25,17 @@ c(exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.025)),
   exp(coef(nobias_model)[2] + summary(nobias_model)$coef[2, 2] * qnorm(.975)))
 # 2.02 (1.96, 2.09)
 
-bias_model <- glm(Y ~ X + C,
-                  family = binomial(link = "logit"),
-                  data = df)
-exp(summary(bias_model)$coef[2, 1])
-c(exp(summary(bias_model)$coef[2, 1] +
-        summary(bias_model)$coef[2, 2] * qnorm(.025)),
-  exp(summary(bias_model)$coef[2, 1] +
-        summary(bias_model)$coef[2, 2] * qnorm(.975)))
+biased_model <- glm(Y ~ X + C,
+                    family = binomial(link = "logit"),
+                    data = df)
+exp(coef(biased_model)[2])
+c(exp(coef(biased_model)[2] + summary(biased_model)$coef[2, 2] * qnorm(.025)),
+  exp(coef(biased_model)[2] + summary(biased_model)$coef[2, 2] * qnorm(.975)))
 # 3.11 (3.03, 3.20)
 
 # OBTAIN BIAS PARAMETERS
 
-u_model <- glm(U ~ X + C + Y,
+u_model <- glm(U ~ X + Y + C,
                family = binomial(link = "logit"),
                data = df)
 summary(u_model)

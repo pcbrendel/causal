@@ -46,7 +46,6 @@ adjust_emc_imp_loop <- function(
 
     bdf <- df[sample(seq_len(n), n, replace = TRUE), ]
 
-
     bdf$Xpred <- rbinom(
       n, 1, plogis(coef_0 + coef_xstar * bdf$Xstar +
                      coef_y * bdf$Y + coef_c * bdf$C)
