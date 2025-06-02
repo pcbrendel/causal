@@ -1,0 +1,69 @@
+```{r}
+library(multibias)
+library(tidyverse)
+library(broom)
+```
+Load data from `multibias` package. This data has a misspecified exposure, Xstar, which we'll ignore for this analysis.
+```{r}
+head(df_em_source)
+summary(df_em_source)
+```
+# 1. Fit outcome model
+```{r}
+outcome_model <- glm(
+  Y ~ X + C1 + C2 + C3,
+  data = df_em_source,
+  family = "binomial"(link = "logit")
+)
+tidy(outcome_model, conf.int = TRUE, exponentiate = TRUE)
+```
+# 2. Predict potential outcomes
+```{r}
+# Create a dataset where everyone is exposed
+df_exposed <- df_em_source
+df_exposed$X <- 1
+
+# Create a dataset where everyone is unexposed
+df_unexposed <- df_em_source
+df_unexposed$X <- 0
+
+# Predict outcomes if everyone was exposed
+exposed_pred_Y <- predict(
+  outcome_model,
+  newdata = df_exposed,
+  type = "response"
+)
+
+# Predict outcomes if everyone was unexposed
+unexposed_pred_Y <- predict(
+  outcome_model,
+  newdata = df_unexposed,
+  type = "response"
+)
+```
+# 3. Calculate marginal outcome estimates
+```{r}
+E_Y_do_X1_prob <- mean(exposed_pred_Y)
+E_Y_do_X0_prob <- mean(unexposed_pred_Y)
+
+print(
+  paste(
+    "Estimated mean outcome if all were exposed (E[Y|do(X=1)]):",
+    round(E_Y_do_X1_prob, 2)
+  )
+)
+print(
+  paste(
+    "Estimated mean outcome if all were unexposed (E[Y|do(X=0)]):",
+    round(E_Y_do_X0_prob, 2)
+  )
+)
+```
+# 4. Estimate the causal effect
+```{r}
+odds_Y_do_X1 <- E_Y_do_X1_prob / (1 - E_Y_do_X1_prob)
+odds_Y_do_X0 <- E_Y_do_X0_prob / (1 - E_Y_do_X0_prob)
+ate <- odds_Y_do_X1 / odds_Y_do_X0
+print(paste("Estimated Average Treatment Effect (ATE):", round(ate, 2)))
+```
+This is great, but there's no confidence interval. Let's perform bootstrap resampling to get a confidence interval.
