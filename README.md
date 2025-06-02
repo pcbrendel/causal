@@ -1,9 +1,10 @@
-# R code for bias analysis tutorials and development
+# R code for causal analyses
 
-* Uncontrolled Confounding - uc_tutorial.R
-* Selection Bias - sel_tutorial.R
-* Exposure Misclassification - emc_tutorial.R
-* Outcome Misclassification - omc_tutorial.R
+Bias analysis tutorials:
+* Uncontrolled Confounding - bias_analysis_uc.R
+* Selection Bias - bias_analysis_sel.R
+* Exposure Misclassification - bias_analysis_em.R
+* Outcome Misclassification - bias_analysis_om.R
 
-TO DO:
-* Tutorials with continuous variables
+Other tutorials:
+* G-computation - gcomp.Rmd
