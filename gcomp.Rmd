@@ -1,13 +1,12 @@
 ```{r}
 library(multibias)
-library(tidyverse)
 library(broom)
 library(boot)
 ```
 
 Standardization (or marginalization over the covariate distribution) is conceptually very similar to g-computation and is, in fact, the core idea behind it. If you fit an outcome regression model and then use it to predict outcomes for everyone under different exposure levels, averaging these predictions across the observed distribution of confounders, you are performing standardization to get a marginal effect. G-computation essentially operationalizes this.
 
-Load data from `multibias` package. This data has a misspecified exposure, Xstar, which we'll ignore for this analysis.
+For some sample data to work with, load `df_em_source` from `multibias` package. This data has a misspecified exposure, Xstar, which we'll ignore for this analysis.
 ```{r}
 head(df_em_source)
 summary(df_em_source)
@@ -76,13 +75,13 @@ print(
 )
 ```
 
-This is a marginal causal effect! Note that the estimate in the outcome_model produces a conditional effect (conditional on C1-C3).
+This ATE is a marginal causal effect! Note that the effect estimate in `outcome_model` produces a conditional effect (effect of X on Y conditional on C1-C3).
 
 This is great, but there's no confidence interval for our estimate. Let's perform bootstrap resampling to get a confidence interval.
 
 # 5. Run with bootstrapping
 
-Make function to perform g-computation on a single bootstrap sample. The `boot::boot` function requires the statistic functino to have two parameters: `data`, the original dataset, and `indices`, the indices for the bootstrap sample.
+First, make a function to perform g-computation on a single bootstrap sample. The `boot::boot()` function requires the statistic functino to have two parameters: `data`, the original dataset, and `indices`, the indices for the bootstrap sample.
 
 ```{r}
 gcomp_fxn <- function(data, indices) {
@@ -127,7 +126,7 @@ gcomp_fxn <- function(data, indices) {
 }
 ```
 
-Now let's run to get a bootstrap estimate and confidence interval.
+Now let's run this function across bootstrap samples to get an estimate with a valid confidence interval.
 ```{r}
 set.seed(123)
 n_reps <- 100
@@ -164,7 +163,7 @@ print(
 )
 ```
 
-Plot the distribution of samples
+Finally, plot the distribution of the ATE estimates from each sample.
 ```{r}
 hist(boot_results$t[, 3],
   main = "Bootstrap Distribution of ATE",
