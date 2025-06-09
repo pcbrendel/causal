@@ -1,6 +1,6 @@
 # Adjusting for Exposure Misclassification
 
-library(tidyverse)
+library(dplyr)
 
 # DERIVE DATA
 
@@ -37,7 +37,7 @@ summary(x_model)
 # ADJUST
 
 # imputation approach
-adjust_emc_imp_loop <- function(
+adjust_em_imp_loop <- function(
   coef_0, coef_xstar, coef_y, coef_c, nreps, plot = FALSE
 ) {
 
@@ -72,7 +72,7 @@ adjust_emc_imp_loop <- function(
 
 # using known, correct bias parameters
 set.seed(1234)
-correct_results <- adjust_emc_imp_loop(
+correct_results <- adjust_em_imp_loop(
   coef_0 =     coef(x_model)[1],
   coef_xstar = coef(x_model)[2],
   coef_y =     coef(x_model)[3],
@@ -86,7 +86,7 @@ correct_results$ci
 
 # using incorret bias parameters
 set.seed(1234)
-incorrect_results <- adjust_emc_imp_loop(
+incorrect_results <- adjust_em_imp_loop(
   coef_0 =     coef(x_model)[1] * 2,
   coef_xstar = coef(x_model)[2] * 2,
   coef_y =     coef(x_model)[3] * 2,
@@ -99,7 +99,7 @@ incorrect_results$ci
 # 2.85 (2.80, 2.89)
 
 # weighting approach
-adjust_emc_wgt_loop <- function(
+adjust_em_wgt_loop <- function(
   coef_0, coef_xstar, coef_y, coef_c, nreps, plot = FALSE
 ) {
 
@@ -136,7 +136,7 @@ adjust_emc_wgt_loop <- function(
 
 # using known, correct bias parameters
 set.seed(1234)
-correct_results <- adjust_emc_wgt_loop(
+correct_results <- adjust_em_wgt_loop(
   coef_0 =     coef(x_model)[1],
   coef_xstar = coef(x_model)[2],
   coef_y =     coef(x_model)[3],
@@ -150,7 +150,7 @@ correct_results$ci
 
 # using incorret bias parameters
 set.seed(1234)
-incorrect_results <- adjust_emc_wgt_loop(
+incorrect_results <- adjust_em_wgt_loop(
   coef_0 =     coef(x_model)[1] * 2,
   coef_xstar = coef(x_model)[2] * 2,
   coef_y =     coef(x_model)[3] * 2,

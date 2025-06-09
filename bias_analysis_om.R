@@ -1,6 +1,6 @@
 # Adjusting for Outcome Misclassification
 
-library(tidyverse)
+library(dplyr)
 
 # DERIVE DATA
 
@@ -49,7 +49,7 @@ summary(y_model)
 # ADJUST
 
 # imputation approach
-adjust_omc_imp_loop <- function(
+adjust_om_imp_loop <- function(
   coef_0, coef_x, coef_ystar, coef_c, nreps, plot = FALSE
 ) {
 
@@ -85,7 +85,7 @@ adjust_omc_imp_loop <- function(
 
 # using known, correct bias parameters
 set.seed(1234)
-correct_results <- adjust_omc_imp_loop(
+correct_results <- adjust_om_imp_loop(
   coef_0 =     coef(y_model)[1],
   coef_x =     coef(y_model)[2],
   coef_ystar = coef(y_model)[3],
@@ -99,7 +99,7 @@ correct_results$ci
 
 # using incorret bias parameters
 set.seed(1234)
-incorrect_results <- adjust_omc_imp_loop(
+incorrect_results <- adjust_om_imp_loop(
   coef_0 =     coef(y_model)[1] * 2,
   coef_x =     coef(y_model)[2] * 2,
   coef_ystar = coef(y_model)[3] * 2,
@@ -112,7 +112,7 @@ incorrect_results$ci
 # 3.62 (3.35, 3.87)
 
 # weighting approach
-adjust_omc_wgt_loop <- function(
+adjust_om_wgt_loop <- function(
   coef_0, coef_x, coef_ystar, coef_c, nreps, plot = FALSE
 ) {
 
@@ -149,7 +149,7 @@ adjust_omc_wgt_loop <- function(
 
 # using known, correct bias parameters
 set.seed(1234)
-correct_results <- adjust_omc_wgt_loop(
+correct_results <- adjust_om_wgt_loop(
   coef_0 =     coef(y_model)[1],
   coef_x =     coef(y_model)[2],
   coef_ystar = coef(y_model)[3],
@@ -163,7 +163,7 @@ correct_results$ci
 
 # using incorret bias parameters
 set.seed(1234)
-incorrect_results <- adjust_omc_wgt_loop(
+incorrect_results <- adjust_om_wgt_loop(
   coef_0 =     coef(y_model)[1] * 2,
   coef_x =     coef(y_model)[2] * 2,
   coef_ystar = coef(y_model)[3] * 2,
