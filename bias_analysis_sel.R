@@ -1,7 +1,5 @@
 # Adjusting for Selection Bias
 
-library(tidyverse)
-
 # DERIVE DATA
 
 set.seed(1234)

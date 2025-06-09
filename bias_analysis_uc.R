@@ -1,6 +1,6 @@
 # Adjusting for Uncontrolled Confounding
 
-library(tidyverse)
+library(dplyr)
 
 # DERIVE DATA
 
