@@ -1,4 +1,4 @@
-# R code for causal analyses
+# 1. R code for causal analyses
 
 Bias analysis tutorials:
 * Uncontrolled Confounding - bias_analysis_uc.R
@@ -8,3 +8,5 @@ Bias analysis tutorials:
 
 Other tutorials:
 * G-computation - gcomp.Rmd
+
+# 2. Random art work
