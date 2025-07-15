@@ -171,13 +171,23 @@ par(mar = c(0, 0, 0, 0), omi = c(0, 0, 0, 0), ann = FALSE, bty = "n")
 plot(
   NULL,
   xlim = c(0, 1),
-  ylim = c(0, 1),
+  ylim = c(0, 1.1), # increased upper limit for title
   axes = FALSE,
   xlab = "",
   ylab = "",
   main = "",
   sub = "",
   frame.plot = FALSE
+)
+
+# optional title
+text(
+  x = 0.005,
+  y = 1.02, # just above the top, reduced space
+  labels = "CFTR ΔF508 Coding DNA Sequence (Location 7q31.2)",
+  cex = 1.2, # larger font for title
+  font = 2, # bold
+  adj = c(0, 0) # left alignment
 )
 
 lines_to_plot <- unlist(strsplit(cftr_deltaF508_sequence_cds_wrapped, "\n"))
