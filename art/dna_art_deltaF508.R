@@ -80,7 +80,7 @@ message(
 # Create the deltaF508 sequence by removing the three nucleotides
 cftr_deltaF508_sequence <- paste0(
   str_sub(cftr_dna_sequence, 1, deletion_start - 1),
-  " ", " ", " ",
+  ".", ".", ".",
   str_sub(cftr_dna_sequence, deletion_end + 1, -1)
 )
 
@@ -126,7 +126,39 @@ cftr_deltaF508_sequence_wrapped <- str_wrap(
   cftr_deltaF508_with_spaces,
   width = 100
 )
+cftr_deltaF508_sequence_wrapped <- str_replace_all(
+  cftr_deltaF508_sequence_wrapped,
+  "\\.",
+  " "
+)
+
 cat(cftr_deltaF508_sequence_wrapped)
+
+# CDS only
+cds_start <- 71
+cds_end <- 4513
+
+cftr_deltaF508_sequence_cds <- str_sub(
+  cftr_deltaF508_sequence,
+  cds_start,
+  cds_end
+)
+
+cftr_deltaF508_cds_with_spaces <- str_replace_all(
+  cftr_deltaF508_sequence_cds,
+  paste0("(.{", 80, "})(?=.)"), "\\1 "
+)
+cftr_deltaF508_sequence_cds_wrapped <- str_wrap(
+  cftr_deltaF508_cds_with_spaces,
+  width = 80
+)
+cftr_deltaF508_sequence_cds_wrapped <- str_replace_all(
+  cftr_deltaF508_sequence_cds_wrapped,
+  "\\.",
+  " "
+)
+
+cat(cftr_deltaF508_sequence_cds_wrapped)
 
 # plot ----
 
@@ -148,7 +180,7 @@ plot(
   frame.plot = FALSE
 )
 
-lines_to_plot <- unlist(strsplit(cftr_deltaF508_sequence_wrapped, "\n"))
+lines_to_plot <- unlist(strsplit(cftr_deltaF508_sequence_cds_wrapped, "\n"))
 
 text_cex <- 0.8
 vfont_type <- c("serif", "plain")
@@ -181,53 +213,3 @@ for (line_idx in seq_along(lines_to_plot)) {
 }
 
 dev.off()
-
-# Create comparison plot showing both sequences ----
-
-# Create a comparison data frame
-healthy_chars <- unlist(strsplit(cftr_dna_sequence, split = ""))
-deltaF508_chars <- unlist(strsplit(cftr_deltaF508_sequence, split = ""))
-
-# Create data frames for plotting
-healthy_data <- data.frame(
-  position = 1:length(healthy_chars),
-  nucleotide = healthy_chars,
-  sequence = "Healthy CFTR"
-)
-
-deltaF508_data <- data.frame(
-  position = 1:length(deltaF508_chars),
-  nucleotide = deltaF508_chars,
-  sequence = "DeltaF508 CFTR"
-)
-
-# Combine data
-comparison_data <- rbind(healthy_data, deltaF508_data)
-
-# Create comparison plot
-comparison_plot <- ggplot(comparison_data, aes(x = position, y = sequence, label = nucleotide)) +
-  geom_text(size = 2, family = "mono") +
-  labs(
-    title = "CFTR cDNA Sequence Comparison: Healthy vs DeltaF508",
-    subtitle = paste("DeltaF508 deletion: positions", deletion_start, "-", deletion_end, "(", nucleotides_to_delete, ")"),
-    x = "Nucleotide Position",
-    y = ""
-  ) +
-  theme_minimal() +
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text.x = element_text(size = 8),
-    plot.title = element_text(size = 12, face = "bold"),
-    plot.subtitle = element_text(size = 10)
-  ) +
-  scale_x_continuous(breaks = seq(0, max(comparison_data$position), by = 500))
-
-# Save comparison plot
-ggsave("art/cftr_comparison_plot.png", comparison_plot, width = 12, height = 4, dpi = 300)
-
-message("\nDeltaF508 mutation sequence created successfully!")
-message("Files saved:")
-message("- art/cftr_deltaF508.txt (raw sequence)")
-message("- art/cftr_dna_deltaF508.svg (visualization)")
-message("- art/cftr_comparison_plot.png (comparison plot)")
