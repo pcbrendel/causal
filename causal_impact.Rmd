@@ -1,0 +1,60 @@
+# Causal Impact Demonstration
+
+Here we will demonstrate how to use the `CausalImpact` package using
+stock market data around the time when Google changed its corporate structure
+with the creation of parent company Alphabet.
+
+```{r message = FALSE}
+library(CausalImpact)
+library(tidyverse)
+library(causaldata)
+library(zoo)
+```
+
+# 1. Data prep and exploration
+
+```{r}
+event <- ymd("2015-08-10")
+df_google <- google_stock %>%
+  filter(Date >= event - 21 & Date <= event + 14)
+head(df_google)
+```
+
+```{r}
+ggplot(df_google) +
+  geom_line(aes(x = Date, y = Google_Return), color = "red") +
+  geom_line(aes(x = Date, y = SP500_Return), color = "blue") +
+  geom_vline(aes(xintercept = event), linetype = "dashed") +
+  labs(title = "Google Stock Price Over Time", x = "Date", y = "Price")
+```
+
+```{r}
+df <- read.zoo(df_google)
+pre_period <- c(index(df)[1], event)
+post_period <- c(event + 1, index(df)[nrow(df)])
+head(df)
+```
+
+# 2. Run the analysis
+
+```{r}
+impact <- CausalImpact(df, pre_period, post_period)
+summary(impact)
+```
+
+```{r}
+plot(impact)
+```
+
+# 3. Refining the model
+
+```{r}
+impact2 <- CausalImpact(
+  df,
+  pre_period,
+  post_period,
+  model.args = list(niter = 5000, nseasons = 5)
+)
+summary(impact2)
+```
+niter default is 1000 and nseasons default = 1
