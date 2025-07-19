@@ -16,7 +16,11 @@ library(zoo)
 ```{r}
 event <- ymd("2015-08-10")
 df_google <- google_stock %>%
-  filter(Date >= event - 21 & Date <= event + 14)
+  filter(Date >= event - 21 & Date <= event + 14) %>%
+  mutate(
+    Google_Return = Google_Return * 100,
+    SP500_Return = SP500_Return * 100
+  )
 head(df_google)
 ```
 
@@ -25,7 +29,11 @@ ggplot(df_google) +
   geom_line(aes(x = Date, y = Google_Return), color = "red") +
   geom_line(aes(x = Date, y = SP500_Return), color = "blue") +
   geom_vline(aes(xintercept = event), linetype = "dashed") +
-  labs(title = "Google Stock Price Over Time", x = "Date", y = "Price")
+  labs(
+    title = "Google Stock Price Over Time",
+    x = "Date",
+    y = "Percent Daily Return"
+  )
 ```
 
 ```{r}
@@ -38,9 +46,37 @@ head(df)
 # 2. Run the analysis
 
 ```{r}
+set.seed(123)
 impact <- CausalImpact(df, pre_period, post_period)
 summary(impact)
 ```
+
+| Metric | Value |
+| ------ | ----- |
+| Actual (Average) | -0.69|
+| Actual (Cumulative) | -6.88|
+| Predicted (Average) | -1.2 (95% CI: -2.1, -0.35)|
+| Predicted (Cumulative) | -12.0 (95% CI: -20.7, -3.46)|
+| Absolute Effect (Average) | 0.51 (95% CI: -0.34, 1.4)|
+| Absolute Effect (Cumulative) | 5.09 (95% CI: -3.42, 13.8)|
+| Relative Effect (Average) | 95% (95% CI: -67%, 88%)|
+| Relative Effect (Cumulative) | 95% (95% CI: -67%, 88%)|
+| Posterior tail-area probability p-val | 0.114|
+| Posterior prob. of a causal effect | 89%|
+
+* Actual (Average): the observed average value of your response variable during the post-intervention period.
+* Actual (Cumulative): the observed sum of your response variable during the post-intervention period.
+* Predicted (Average): the model's estimated average value of your response variable in the post-intervention period, if the intervention had not occurred (i.e., the counterfactual).
+* Predicted (Cumulative): the model's estimated sum of your response variable in the post-intervention period, if the intervention had not occurred.
+* Absolute Effect (Average): Actual (Average) - Predicted (Average)
+* Absolute Effect (Cumulative): Actual (Cumulative) - Predicted (Cumulative)
+* Relative Effect (Average): Absolute (Average) / Predicted (Average)
+* Relative Effect (Cumulative): Absolute (Cumulative) / Predicted (Cumulative)
+* Posterior tail-area probability p-val: this p-value is a Bayesian analogue to the frequentist p-value. It represents the probability of observing an effect as large as, or larger than, the one estimated, purely by chance, assuming the null hypothesis of no effect is true.
+* Posterior prob. of a causal effect: the posterior probability that the actual effect (positive or negative) is non-zero
+
+It appears that there is *some* evidence of a causal effect, but this really
+isn't strong enough evidence to confidently claim a causal impact.
 
 ```{r}
 plot(impact)
