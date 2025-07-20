@@ -26,13 +26,14 @@ head(df_google)
 
 ```{r}
 ggplot(df_google) +
-  geom_line(aes(x = Date, y = Google_Return), color = "red") +
-  geom_line(aes(x = Date, y = SP500_Return), color = "blue") +
+  geom_line(aes(x = Date, y = Google_Return, color = "Google")) +
+  geom_line(aes(x = Date, y = SP500_Return, color = "S&P 500")) +
   geom_vline(aes(xintercept = event), linetype = "dashed") +
   labs(
     title = "Google Stock Price Over Time",
     x = "Date",
-    y = "Percent Daily Return"
+    y = "Percent Daily Return",
+    color = "Stock"
   )
 ```
 
@@ -73,10 +74,14 @@ summary(impact)
 * Relative Effect (Average): Absolute (Average) / Predicted (Average)
 * Relative Effect (Cumulative): Absolute (Cumulative) / Predicted (Cumulative)
 * Posterior tail-area probability p-val: this p-value is a Bayesian analogue to the frequentist p-value. It represents the probability of observing an effect as large as, or larger than, the one estimated, purely by chance, assuming the null hypothesis of no effect is true.
-* Posterior prob. of a causal effect: the posterior probability that the actual effect (positive or negative) is non-zero
+* Posterior prob. of a causal effect: the posterior probability that the actual effect (positive or negative) is non-zero.
 
 It appears that there is *some* evidence of a causal effect, but this really
 isn't strong enough evidence to confidently claim a causal impact.
+
+```{r}
+summary(impact, "report")
+```
 
 ```{r}
 plot(impact)
@@ -93,4 +98,3 @@ impact2 <- CausalImpact(
 )
 summary(impact2)
 ```
-niter default is 1000 and nseasons default = 1
