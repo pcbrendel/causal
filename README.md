@@ -8,5 +8,6 @@ Bias analysis tutorials:
 
 Other tutorials:
 * G-computation - gcomp.Rmd
+* Causal Impact - causal_impact.Rmd
 
-# 2. Random art work
+# 2. Art projects
