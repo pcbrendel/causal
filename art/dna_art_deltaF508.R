@@ -3,54 +3,20 @@ library(svglite)
 library(ggplot2)
 library(stringr)
 
-# get sequence ----
-# https://www.ncbi.nlm.nih.gov/nuccore/NM_000492.4
-# entrez = a search engine and data retrieval system
-# that allows users to search across dozens of NCBI databases
-# nuccore = "Nucleotide Core" database at NCBI
-# (National Center for Biotechnology Information)
-# accession = unique, stable identifier for a sequence
+source("art/dna_art.R")
 
-# Define the specific RefSeq mRNA accession for human CFTR
-# This is NM_000492.4 for human CFTR mRNA
-cftr_mrna <- "NM_000492.4"
+# 1. Get sequence ----
 
-# Fetch the FASTA sequence directly using the accession ID
-message(
-  paste("Attempting to fetch mRNA sequence for accession:", cftr_mrna)
+cftr_id <- "NM_000492.4"
+cftr_dna <- scrape_dna(cftr_id)
+cds <- get_cds(cftr_id)
+cftr_cds <- str_sub(
+  cftr_dna,
+  cds[1],
+  cds[2]
 )
-cftr_fasta_record <- tryCatch(
-  {
-    entrez_fetch(
-      db = "nuccore",
-      id = cftr_mrna,
-      rettype = "fasta",
-      retmode = "text"
-    )
-  },
-  error = function(e) {
-    message(paste("Error fetching sequence:", e$message))
-    return(NULL)
-  }
-)
+cftr_cds
 
-if (!is.null(cftr_fasta_record)) {
-  lines <- strsplit(cftr_fasta_record, "\n")[[1]]
-  cftr_dna_sequence <- paste(lines[-1], collapse = "")
-
-  message("\nCFTR DNA (mRNA/cDNA) Sequence (first 100 characters):\n")
-  print(substring(cftr_dna_sequence, 1, 100))
-  message(paste("\nTotal length:", nchar(cftr_dna_sequence), "base pairs"))
-} else {
-  message("Failed to retrieve CFTR mRNA sequence using direct accession.")
-}
-# this is the coding DNA sequence
-# it includes:
-# - 5' UTR (non-coding before the CDS)
-# - CDS (coding sequence)
-# - 3' UTR (non-coding after the CDS)
-
-# Create deltaF508 mutation ----
 # Deletion of phenylalanine at position 508 in the protein
 
 # Define the positions for the deletion (1-based indexing)
@@ -58,13 +24,14 @@ if (!is.null(cftr_fasta_record)) {
 # F508 codon is the 508th codon in the CDS
 # CDS position: (508-1)*3 + 1 = 1522 (start of codon)
 # mRNA position: 71 + 1522 - 1 = 1592
-deletion_start <- 1592
-deletion_end <- 1594
+
+deletion_start <- 1522
+deletion_end <- 1524
 
 # Extract the nucleotides to be deleted for verification
 # should be TTT or TTC for phenylalanine
 nucleotides_to_delete <- str_sub(
-  cftr_dna_sequence, deletion_start, deletion_end
+  cftr_cds, deletion_start, deletion_end
 )
 message(
   paste(
@@ -78,21 +45,21 @@ message(
 )
 
 # Create the deltaF508 sequence by removing the three nucleotides
-cftr_deltaF508_sequence <- paste0(
-  str_sub(cftr_dna_sequence, 1, deletion_start - 1),
+delta_f508 <- paste0(
+  str_sub(cftr_cds, 1, deletion_start - 1),
   ".", ".", ".",
-  str_sub(cftr_dna_sequence, deletion_end + 1, -1)
+  str_sub(cftr_cds, deletion_end + 1, -1)
 )
 
 # Show the region around the deletion for comparison
 context_size <- 20
 healthy_context <- str_sub(
-  cftr_dna_sequence,
+  cftr_cds,
   deletion_start - context_size,
   deletion_end + context_size
 )
 mutant_context <- str_sub(
-  cftr_deltaF508_sequence,
+  delta_f508,
   deletion_start - context_size,
   deletion_end + context_size
 )
@@ -110,62 +77,42 @@ message(healthy_context)
 message(paste("\nDeltaF508 sequence around deletion site:"))
 message(mutant_context)
 
-# save, modify sequence ----
+# 2. Save, format ----
 
 # Save the deltaF508 sequence
 file_conn <- file("art/cftr_deltaF508.txt")
-writeLines(cftr_deltaF508_sequence, file_conn)
+writeLines(delta_f508, file_conn)
 close(file_conn)
 
-# Format for display
-cftr_deltaF508_with_spaces <- str_replace_all(
-  cftr_deltaF508_sequence,
-  paste0("(.{", 100, "})(?=.)"), "\\1 "
+# format
+letters_per_row <- 80
+
+delta_f508_spaces <- str_replace_all(
+  delta_f508,
+  paste0("(.{", letters_per_row, "})(?=.)"), "\\1 "
 )
-cftr_deltaF508_sequence_wrapped <- str_wrap(
-  cftr_deltaF508_with_spaces,
-  width = 100
+delta_f508_wrapped <- str_wrap(
+  delta_f508_spaces,
+  width = letters_per_row
 )
-cftr_deltaF508_sequence_wrapped <- str_replace_all(
-  cftr_deltaF508_sequence_wrapped,
+delta_f508_wrapped <- str_replace_all(
+  delta_f508_wrapped,
   "\\.",
   " "
 )
 
-cat(cftr_deltaF508_sequence_wrapped)
+cat(delta_f508_wrapped)
 
-# CDS only
-cds_start <- 71
-cds_end <- 4513
+# Plot 1: Letters ----
 
-cftr_deltaF508_sequence_cds <- str_sub(
-  cftr_deltaF508_sequence,
-  cds_start,
-  cds_end
+svglite(file = "art/cftr_dna_deltaF508.svg", width = 12, height = 12)
+
+par(
+  mar = c(0, 0, 0, 0),
+  omi = c(0, 0, 0, 0),
+  ann = FALSE,
+  bty = "n"
 )
-
-cftr_deltaF508_cds_with_spaces <- str_replace_all(
-  cftr_deltaF508_sequence_cds,
-  paste0("(.{", 80, "})(?=.)"), "\\1 "
-)
-cftr_deltaF508_sequence_cds_wrapped <- str_wrap(
-  cftr_deltaF508_cds_with_spaces,
-  width = 80
-)
-cftr_deltaF508_sequence_cds_wrapped <- str_replace_all(
-  cftr_deltaF508_sequence_cds_wrapped,
-  "\\.",
-  " "
-)
-
-cat(cftr_deltaF508_sequence_cds_wrapped)
-
-# plot ----
-
-svg_file_name <- "art/cftr_dna_deltaF508.svg"
-svglite(file = svg_file_name, width = 12, height = 12)
-
-par(mar = c(0, 0, 0, 0), omi = c(0, 0, 0, 0), ann = FALSE, bty = "n")
 
 # initialize
 plot(
@@ -222,4 +169,48 @@ for (line_idx in seq_along(lines_to_plot)) {
   current_y <- current_y - line_height
 }
 
+dev.off()
+
+# Plot 2: DNA as colored dots ----
+
+# Convert sequence to vector
+cftr_deltaF508_sequence_cds_vec <- strsplit(cftr_deltaF508_sequence_cds, "")[[1]]
+
+base_colors <- c(
+  A = "forestgreen",
+  T = "firebrick",
+  C = "royalblue",
+  G = "goldenrod",
+  "." = "black"
+)
+dot_colors <- base_colors[cftr_deltaF508_sequence_cds_vec]
+dot_colors[is.na(dot_colors)] <- "gray" # fallback for any unexpected chars
+
+n_per_row <- 80
+n <- length(cftr_deltaF508_sequence_cds_vec)
+x <- rep(1:n_per_row, length.out = n)
+y <- rep(seq(1, ceiling(n / n_per_row)), each = n_per_row)[1:n]
+
+svglite(file = "art/cftr_dna_deltaF508_dots.svg", width = 12, height = 12)
+par(mar = c(1, 1, 2, 1))
+plot(
+  x, -y,
+  col = dot_colors, pch = 16, cex = 1.2,
+  axes = FALSE, xlab = "", ylab = ""
+  # main = "CFTR ΔF508 Coding DNA Sequence (Location 7q31.2)"
+)
+
+# optional title
+# text(
+#   x = 0.005,
+#   y = 1.00, # just above the top, reduced space
+#   labels = "CFTR ΔF508 Coding DNA Sequence (Location 7q31.2)",
+#   cex = 1.2, # larger font for title
+#   font = 2, # bold
+#   adj = c(0, 0) # left alignment
+# )
+
+# legend(
+#   "topright", legend = names(base_colors), col = base_colors, pch = 16, cex = 1
+# )
 dev.off()

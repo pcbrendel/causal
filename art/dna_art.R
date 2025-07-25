@@ -3,7 +3,7 @@ library(svglite)
 library(ggplot2)
 library(stringr)
 
-# get sequence ----
+# 1. Get sequence ----
 # https://www.ncbi.nlm.nih.gov/nuccore/NM_000492.4
 # entrez = a search engine and data retrieval system
 # that allows users to search across dozens of NCBI databases
@@ -11,60 +11,120 @@ library(stringr)
 # (National Center for Biotechnology Information)
 # accession = unique, stable identifier for a sequence
 
-# Define the specific RefSeq mRNA accession for human CFTR
-# This is NM_000492.4 for human CFTR mRNA
-cftr_mrna <- "NM_000492.4"
+# this is the coding DNA sequence
+# it includes:
+# - 5' UTR (non-coding before the CDS)
+# - CDS (coding sequence)
+# - 3' UTR (non-coding after the CDS)
 
-# Fetch the FASTA sequence directly using the accession ID
-message(
-  paste("Attempting to fetch mRNA sequence for accession:", cftr_mrna)
-)
-cftr_fasta_record <- tryCatch(
-  {
-    entrez_fetch(
-      db = "nuccore",
-      id = cftr_mrna,
-      rettype = "fasta",
-      retmode = "text"
-    )
-  },
-  error = function(e) {
-    message(paste("Error fetching sequence:", e$message))
-    return(NULL)
+scrape_dna <- function(id) {
+  # Fetch the FASTA sequence directly using the accession ID
+  message(
+    paste("Attempting to fetch mRNA sequence for accession:", id)
+  )
+  fasta_record <- tryCatch(
+    {
+      entrez_fetch(
+        db = "nuccore",
+        id = id,
+        rettype = "fasta",
+        retmode = "text"
+      )
+    },
+    error = function(e) {
+      message(paste("Error fetching sequence:", e$message))
+      return(NULL)
+    }
+  )
+
+  if (!is.null(fasta_record)) {
+    # Parse the FASTA record
+    lines <- strsplit(fasta_record, "\n")[[1]]
+    # Remove the header line and concatenate the sequence lines
+    dna_sequence <- paste(lines[-1], collapse = "")
+
+    message("\nDNA (mRNA/cDNA) Sequence (first 100 characters):\n")
+    print(substring(dna_sequence, 1, 100))
+    message(paste("\nTotal length:", nchar(dna_sequence), "base pairs"))
+    return(dna_sequence)
+  } else {
+    message("Failed to retrieve cDNA sequence using direct accession.")
   }
-)
-
-if (!is.null(cftr_fasta_record)) {
-  # Parse the FASTA record
-  lines <- strsplit(cftr_fasta_record, "\n")[[1]]
-  # Remove the header line and concatenate the sequence lines
-  cftr_dna_sequence <- paste(lines[-1], collapse = "")
-
-  message("\nCFTR DNA (mRNA/cDNA) Sequence (first 100 characters):\n")
-  print(substring(cftr_dna_sequence, 1, 100))
-  message(paste("\nTotal length:", nchar(cftr_dna_sequence), "base pairs"))
-
-} else {
-  message("Failed to retrieve CFTR mRNA sequence using direct accession.")
 }
 
-# save, modify sequence ----
+# example
+# cftr_id <- "NM_000492.4"
+# test <- scrape_dna(cftr_id)
 
-cftr_dna_sequence
+# 2. Get CDS
 
-file_conn <- file("art/cftr_healthy.txt")
-writeLines(cftr_dna_sequence, file_conn)
-close(file_conn)
+get_cds <- function(id) {
+  # Extract CDS coordinates from GenBank record
+  message("Fetching CDS coordinates from GenBank record...")
+  gb_record <- entrez_fetch(
+    db = "nuccore",
+    id = id,
+    rettype = "gb",
+    retmode = "text"
+  )
 
-cftr_with_spaces <- str_replace_all(
-  cftr_dna_sequence,
-  paste0("(.{", 100, "})(?=.)"), "\\1 "
-)
-cftr_dna_sequence_wrapped <- str_wrap(
-  cftr_with_spaces,
-  width = 100
-)
-cat(cftr_dna_sequence_wrapped)
+  # Initialize default values
+  cds_start <- NA
+  cds_end <- NA
+
+  # Parse CDS coordinates from GenBank format
+  cds_lines <- grep(
+    "^\\s+CDS\\s+",
+    strsplit(gb_record, "\n")[[1]],
+    value = TRUE
+  )
+
+  if (length(cds_lines) > 0) {
+    # Extract coordinates from the first CDS line
+    cds_line <- cds_lines[1]
+    message(paste("Found CDS line:", cds_line))
+
+    # Extract numbers from format like "join(71..4513)" or "71..4513"
+    # Use a more robust regex pattern
+    coords_pattern <- "(\\d+)\\.\\.(\\d+)"
+    coords_match <- regexpr(coords_pattern, cds_line)
+
+    if (coords_match != -1) {
+      # Extract the matched substring
+      matched_text <- substr(
+        cds_line,
+        coords_match,
+        coords_match + attr(coords_match, "match.length") - 1
+      )
+
+      # Parse the coordinates using str_match
+      coords <- str_match(matched_text, coords_pattern)
+      if (!is.na(coords[1, 2]) && !is.na(coords[1, 3])) {
+        cds_start <- as.numeric(coords[1, 2])
+        cds_end <- as.numeric(coords[1, 3])
+        message(
+          paste(
+            "CDS coordinates from GenBank:", cds_start, "to", cds_end
+          )
+        )
+      } else {
+        message("Could not parse coordinates from matched text")
+      }
+    } else {
+      message("Could not find coordinate pattern in CDS line")
+    }
+  } else {
+    message("No CDS lines found in GenBank record")
+  }
+
+  return(c(cds_start, cds_end))
+}
+
+# example
+# cftr_id <- "NM_000492.4"
+# test <- get_cds(cftr_id)
+
+
 
 # plot ----
 
@@ -97,12 +157,10 @@ current_y <- 0.995
 start_x <- 0.005
 
 for (line_idx in seq_along(lines_to_plot)) {
-
   line_text <- lines_to_plot[line_idx]
   current_x <- start_x
 
   for (char_idx in seq_along(strsplit(line_text, "")[[1]])) {
-
     char_to_plot <- substr(line_text, char_idx, char_idx)
 
     text(
