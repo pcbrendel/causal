@@ -80,7 +80,7 @@ message(mutant_context)
 # 2. Save, format ----
 
 # Save the deltaF508 sequence
-file_conn <- file("art/cftr_deltaF508.txt")
+file_conn <- file("art/cftr_deltaf508.txt")
 writeLines(delta_f508, file_conn)
 close(file_conn)
 
@@ -103,9 +103,12 @@ delta_f508_wrapped <- str_replace_all(
 
 cat(delta_f508_wrapped)
 
+# Convert sequence to vector
+delta_f508_vec <- strsplit(delta_f508, "")[[1]]
+
 # Plot 1: Letters ----
 
-svglite(file = "art/cftr_dna_deltaF508.svg", width = 12, height = 12)
+svglite(file = "art/dna_letters_cftr_deltaf508.svg", width = 12, height = 12)
 
 par(
   mar = c(0, 0, 0, 0),
@@ -137,7 +140,7 @@ text(
   adj = c(0, 0) # left alignment
 )
 
-lines_to_plot <- unlist(strsplit(cftr_deltaF508_sequence_cds_wrapped, "\n"))
+lines_to_plot <- unlist(strsplit(delta_f508_wrapped, "\n"))
 
 text_cex <- 0.8
 vfont_type <- c("serif", "plain")
@@ -173,44 +176,60 @@ dev.off()
 
 # Plot 2: DNA as colored dots ----
 
-# Convert sequence to vector
-cftr_deltaF508_sequence_cds_vec <- strsplit(cftr_deltaF508_sequence_cds, "")[[1]]
-
 base_colors <- c(
   A = "forestgreen",
   T = "firebrick",
   C = "royalblue",
-  G = "goldenrod",
-  "." = "black"
+  G = "goldenrod"
 )
-dot_colors <- base_colors[cftr_deltaF508_sequence_cds_vec]
-dot_colors[is.na(dot_colors)] <- "gray" # fallback for any unexpected chars
 
+# Create data frame with coordinates and colors
 n_per_row <- 80
-n <- length(cftr_deltaF508_sequence_cds_vec)
+n <- length(delta_f508_vec)
 x <- rep(1:n_per_row, length.out = n)
 y <- rep(seq(1, ceiling(n / n_per_row)), each = n_per_row)[1:n]
 
-svglite(file = "art/cftr_dna_deltaF508_dots.svg", width = 12, height = 12)
-par(mar = c(1, 1, 2, 1))
-plot(
-  x, -y,
-  col = dot_colors, pch = 16, cex = 1.2,
-  axes = FALSE, xlab = "", ylab = ""
-  # main = "CFTR ΔF508 Coding DNA Sequence (Location 7q31.2)"
+# Create data frame for plotting
+plot_data <- data.frame(
+  x = x,
+  y = -y,
+  base = delta_f508_vec,
+  color = base_colors[delta_f508_vec]
 )
 
-# optional title
-# text(
-#   x = 0.005,
-#   y = 1.00, # just above the top, reduced space
-#   labels = "CFTR ΔF508 Coding DNA Sequence (Location 7q31.2)",
-#   cex = 1.2, # larger font for title
-#   font = 2, # bold
-#   adj = c(0, 0) # left alignment
-# )
+# Remove rows with "." (deletion sites) - no circles for these
+plot_data <- plot_data[!is.na(plot_data$color), ]
 
-# legend(
-#   "topright", legend = names(base_colors), col = base_colors, pch = 16, cex = 1
-# )
+# fallback for any unexpected chars
+plot_data$color[is.na(plot_data$color)] <- "gray"
+
+# Group by color for pen plotter compatibility
+color_groups <- split(plot_data, plot_data$color)
+
+svglite(file = "art/dna_dots_cftr_deltaf508.svg", width = 12, height = 12)
+par(mar = c(1, 1, 2, 1))
+
+# Initialize empty plot
+plot(
+  NULL,
+  xlim = range(plot_data$x),
+  ylim = range(plot_data$y),
+  axes = FALSE,
+  xlab = "",
+  ylab = ""
+)
+
+# Plot each color group separately to group them in SVG
+for (color_name in names(color_groups)) {
+  group_data <- color_groups[[color_name]]
+  points(
+    group_data$x,
+    group_data$y,
+    col = color_name,
+    pch = 1, # Open circles with strokes (pen plotter compatible)
+    cex = 1.2,
+    lwd = 1.5 # Stroke width for better visibility
+  )
+}
+
 dev.off()
