@@ -4,10 +4,32 @@ library(ggplot2)
 library(stringr)
 
 source("art/dna_art.R")
+text_path <- "art/cftr_deltaf508.txt"
+letter_plot_path <- "art/cftr_dna_letters_deltaf508.svg"
+dot_plot_path <- "art/cftr_dna_dots_deltaf508.svg"
 
-# 1. Get sequence ----
+# Inputs ----
 
 cftr_id <- "NM_000492.4"
+# Deletion of phenylalanine at position 508 in the protein
+# Define the positions for the deletion (1-based indexing)
+# Using current NCBI annotation: CDS starts at position 71
+# F508 codon is the 508th codon in the CDS
+# CDS position: (508-1)*3 + 1 = 1522 (start of codon)
+# mRNA position: 71 + 1522 - 1 = 1592
+deletion_start <- 1522
+deletion_end <- 1524
+n_per_row <- 80
+title <- "CFTR ΔF508 Coding DNA Sequence (Location 7q31.2)"
+colors <- c(
+  A = "forestgreen",
+  T = "firebrick",
+  C = "royalblue",
+  G = "goldenrod"
+)
+
+# Get sequence ----
+
 cftr_dna <- scrape_dna(cftr_id)
 cds <- get_cds(cftr_id)
 cftr_cds <- str_sub(
@@ -17,16 +39,7 @@ cftr_cds <- str_sub(
 )
 cftr_cds
 
-# Deletion of phenylalanine at position 508 in the protein
-
-# Define the positions for the deletion (1-based indexing)
-# Using current NCBI annotation: CDS starts at position 71
-# F508 codon is the 508th codon in the CDS
-# CDS position: (508-1)*3 + 1 = 1522 (start of codon)
-# mRNA position: 71 + 1522 - 1 = 1592
-
-deletion_start <- 1522
-deletion_end <- 1524
+# Apply mutation ----
 
 # Extract the nucleotides to be deleted for verification
 # should be TTT or TTC for phenylalanine
@@ -77,16 +90,14 @@ message(healthy_context)
 message(paste("\nDeltaF508 sequence around deletion site:"))
 message(mutant_context)
 
-# 2. Save, format ----
+# Save and format ----
 
 # Save the deltaF508 sequence
-file_conn <- file("art/cftr_deltaf508.txt")
+file_conn <- file(text_path)
 writeLines(delta_f508, file_conn)
 close(file_conn)
 
 # format
-letters_per_row <- 80
-
 delta_f508_spaces <- str_replace_all(
   delta_f508,
   paste0("(.{", letters_per_row, "})(?=.)"), "\\1 "
@@ -108,7 +119,7 @@ delta_f508_vec <- strsplit(delta_f508, "")[[1]]
 
 # Plot 1: Letters ----
 
-svglite(file = "art/dna_letters_cftr_deltaf508.svg", width = 12, height = 12)
+svglite(file = letter_plot_path, width = 12, height = 12)
 
 par(
   mar = c(0, 0, 0, 0),
@@ -134,7 +145,7 @@ plot(
 text(
   x = 0.005,
   y = 1.02, # just above the top, reduced space
-  labels = "CFTR ΔF508 Coding DNA Sequence (Location 7q31.2)",
+  labels = title,
   cex = 1.2, # larger font for title
   font = 2, # bold
   adj = c(0, 0) # left alignment
@@ -176,60 +187,9 @@ dev.off()
 
 # Plot 2: DNA as colored dots ----
 
-base_colors <- c(
-  A = "forestgreen",
-  T = "firebrick",
-  C = "royalblue",
-  G = "goldenrod"
+dot_plot(
+  dna_seq = delta_f508_vec,
+  svg_file_name = dot_plot_path,
+  n_per_row = n_per_row,
+  colors = colors
 )
-
-# Create data frame with coordinates and colors
-n_per_row <- 80
-n <- length(delta_f508_vec)
-x <- rep(1:n_per_row, length.out = n)
-y <- rep(seq(1, ceiling(n / n_per_row)), each = n_per_row)[1:n]
-
-# Create data frame for plotting
-plot_data <- data.frame(
-  x = x,
-  y = -y,
-  base = delta_f508_vec,
-  color = base_colors[delta_f508_vec]
-)
-
-# Remove rows with "." (deletion sites) - no circles for these
-plot_data <- plot_data[!is.na(plot_data$color), ]
-
-# fallback for any unexpected chars
-plot_data$color[is.na(plot_data$color)] <- "gray"
-
-# Group by color for pen plotter compatibility
-color_groups <- split(plot_data, plot_data$color)
-
-svglite(file = "art/dna_dots_cftr_deltaf508.svg", width = 12, height = 12)
-par(mar = c(1, 1, 2, 1))
-
-# Initialize empty plot
-plot(
-  NULL,
-  xlim = range(plot_data$x),
-  ylim = range(plot_data$y),
-  axes = FALSE,
-  xlab = "",
-  ylab = ""
-)
-
-# Plot each color group separately to group them in SVG
-for (color_name in names(color_groups)) {
-  group_data <- color_groups[[color_name]]
-  points(
-    group_data$x,
-    group_data$y,
-    col = color_name,
-    pch = 1, # Open circles with strokes (pen plotter compatible)
-    cex = 1.2,
-    lwd = 1.5 # Stroke width for better visibility
-  )
-}
-
-dev.off()

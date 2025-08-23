@@ -3,7 +3,7 @@ library(svglite)
 library(ggplot2)
 library(stringr)
 
-# 1. Get sequence ----
+# Get sequence ----
 # https://www.ncbi.nlm.nih.gov/nuccore/NM_000492.4
 # entrez = a search engine and data retrieval system
 # that allows users to search across dozens of NCBI databases
@@ -56,7 +56,7 @@ scrape_dna <- function(id) {
 # cftr_id <- "NM_000492.4"
 # test <- scrape_dna(cftr_id)
 
-# 2. Get CDS
+# Get CDS ----
 
 get_cds <- function(id) {
   # Extract CDS coordinates from GenBank record
@@ -124,9 +124,80 @@ get_cds <- function(id) {
 # cftr_id <- "NM_000492.4"
 # test <- get_cds(cftr_id)
 
+# Apply deletion ----
 
+# Letter plot ----
 
-# plot ----
+# Dot plot ----
+
+dot_plot <- function(
+  dna_seq, svg_file_name, n_per_row, colors
+) {
+  n <- length(dna_seq)
+  x <- rep(1:n_per_row, length.out = n)
+  y <- rep(seq(1, ceiling(n / n_per_row)), each = n_per_row)[1:n]
+
+  plot_data <- data.frame(
+    x = x,
+    y = -y,
+    base = dna_seq,
+    color = colors[dna_seq]
+  )
+
+  # Remove rows with "." (deletion sites) - no circles for these
+  plot_data <- plot_data[!is.na(plot_data$color), ]
+
+  # fallback for any unexpected chars
+  plot_data$color[is.na(plot_data$color)] <- "black"
+
+  # Split by color
+  color_groups <- split(plot_data, plot_data$color)
+
+  # Create SVG file
+  svglite(file = svg_file_name, width = 12, height = 12)
+
+  par(mar = c(1, 1, 2, 1))
+
+  # Initialize empty plot
+  plot(
+    NULL,
+    xlim = range(plot_data$x),
+    ylim = range(plot_data$y),
+    axes = FALSE,
+    xlab = "",
+    ylab = ""
+  )
+
+  # Plot each color group separately to group them in SVG
+  for (color_name in names(color_groups)) {
+    group_data <- color_groups[[color_name]]
+    points(
+      group_data$x,
+      group_data$y,
+      col = color_name,
+      pch = 1, # Open circles with strokes (pen plotter compatible)
+      cex = 1.2,
+      lwd = 1.5 # Stroke width for better visibility
+    )
+  }
+
+  dev.off()
+}
+
+# example
+# dot_plot(
+#   dna_seq = delta_f508_vec,
+#   svg_file_name = "art/cftr_dna_dots_deltaf508.svg",
+#   n_per_row = 80,
+#   colors = c(
+#     A = "forestgreen",
+#     T = "firebrick",
+#     C = "royalblue",
+#     G = "goldenrod"
+#   )
+# )
+
+# old ----
 
 # svg_file_name <- "art/cftr_dna_test.svg"
 # svglite(file = svg_file_name, width = 12, height = 12)
@@ -199,8 +270,6 @@ get_cds <- function(id) {
 
 # dev.off()
 
-
-# OLD ----
 
 # my_string <- substr(cftr_dna_sequence, 1, 200)
 # my_string <- cftr_dna_sequence
