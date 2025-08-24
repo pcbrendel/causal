@@ -58,7 +58,7 @@ scrape_dna <- function(id) {
 
 # Get CDS ----
 
-get_cds <- function(id) {
+get_cds_positions <- function(id) {
   # Extract CDS coordinates from GenBank record
   message("Fetching CDS coordinates from GenBank record...")
   gb_record <- entrez_fetch(
@@ -126,7 +126,7 @@ get_cds <- function(id) {
 
 # Apply deletion ----
 
-delete_dna <- function(dna_seq, start, stop) {
+delete_dna <- function(dna_seq, txt_file_name, start, stop) {
 
   nucleotides_to_delete <- str_sub(
     dna_seq, start, stop
@@ -173,25 +173,118 @@ delete_dna <- function(dna_seq, start, stop) {
   message(paste("\nUpdated sequence around deletion site:"))
   message(mutant_context)
 
+  file_conn <- file(txt_file_name)
+  writeLines(new_seq, file_conn)
+  close(file_conn)
+
   return(new_seq)
 }
 
 # Letter plot ----
 
+letter_plot <- function(
+  dna_seq, svg_file_name, n_per_row, colors,
+  title = FALSE, title_text = "",
+  width = 12, height = 12
+) {
+
+  dna_seq_spaces <- str_replace_all(
+    dna_seq,
+    paste0("(.{", n_per_row, "})(?=.)"), "\\1 "
+  )
+  dna_seq_wrapped <- str_wrap(
+    dna_seq_spaces,
+    width = n_per_row
+  )
+  dna_seq_wrapped <- str_replace_all(
+    dna_seq_wrapped,
+    "\\.",
+    " "
+  )
+
+  svglite(file = svg_file_name, width = 12, height = 12)
+
+  par(
+    mar = c(0, 0, 0, 0),
+    omi = c(0, 0, 0, 0),
+    ann = FALSE,
+    bty = "n"
+  )
+
+  # initialize
+  plot(
+    NULL,
+    xlim = c(0, 1),
+    ylim = c(0, 1.1), # increased upper limit for title
+    axes = FALSE,
+    xlab = "",
+    ylab = "",
+    main = "",
+    sub = "",
+    frame.plot = FALSE
+  )
+
+  if (title) {
+    text(
+      x = 0.005,
+      y = 1.02, # just above the top, reduced space
+      labels = title_text,
+      cex = 1.2, # larger font for title
+      font = 2, # bold
+      adj = c(0, 0) # left alignment
+    )
+  }
+
+  lines_to_plot <- unlist(strsplit(dna_seq_wrapped, "\n"))
+
+  text_cex <- 0.8
+  vfont_type <- c("serif", "plain")
+  line_height <- strheight("Mg", cex = text_cex, font = 1) * 1.5
+  char_width <- 0.01
+  current_y <- 0.995
+  start_x <- 0.005
+
+  for (line_idx in seq_along(lines_to_plot)) {
+    line_text <- lines_to_plot[line_idx]
+    current_x <- start_x
+
+    for (char_idx in seq_along(strsplit(line_text, "")[[1]])) {
+      char_to_plot <- str_sub(line_text, char_idx, char_idx)
+
+      text(
+        x = current_x,
+        y = current_y,
+        labels = char_to_plot,
+        vfont = vfont_type,
+        cex = text_cex,
+        adj = c(0, 0.5)
+      )
+
+      current_x <- current_x + char_width
+    }
+
+    current_y <- current_y - line_height
+  }
+
+  dev.off()
+
+}
+
 # Dot plot ----
 
 dot_plot <- function(
-  dna_seq, svg_file_name, n_per_row, colors
+  dna_seq, svg_file_name, n_per_row, colors, width = 12, height = 12
 ) {
-  n <- length(dna_seq)
+  dna_seq_vec <- strsplit(dna_seq, "")[[1]]
+  n <- length(dna_seq_vec)
   x <- rep(1:n_per_row, length.out = n)
   y <- rep(seq(1, ceiling(n / n_per_row)), each = n_per_row)[1:n]
 
   plot_data <- data.frame(
     x = x,
     y = -y,
-    base = dna_seq,
-    color = colors[dna_seq]
+    base = dna_seq_vec,
+    color = colors[dna_seq_vec]
   )
 
   # Remove rows with "." (deletion sites) - no circles for these
@@ -204,7 +297,7 @@ dot_plot <- function(
   color_groups <- split(plot_data, plot_data$color)
 
   # Create SVG file
-  svglite(file = svg_file_name, width = 12, height = 12)
+  svglite(file = svg_file_name, width = width, height = height)
 
   par(mar = c(1, 1, 2, 1))
 
