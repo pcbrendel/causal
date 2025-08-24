@@ -40,55 +40,9 @@ cftr_cds <- str_sub(
 cftr_cds
 
 # Apply mutation ----
-
 # Extract the nucleotides to be deleted for verification
 # should be TTT or TTC for phenylalanine
-nucleotides_to_delete <- str_sub(
-  cftr_cds, deletion_start, deletion_end
-)
-message(
-  paste(
-    "\nNucleotides to be deleted (positions",
-    deletion_start,
-    "-",
-    deletion_end,
-    "):",
-    nucleotides_to_delete
-  )
-)
-
-# Create the deltaF508 sequence by removing the three nucleotides
-delta_f508 <- paste0(
-  str_sub(cftr_cds, 1, deletion_start - 1),
-  ".", ".", ".",
-  str_sub(cftr_cds, deletion_end + 1, -1)
-)
-
-# Show the region around the deletion for comparison
-context_size <- 20
-healthy_context <- str_sub(
-  cftr_cds,
-  deletion_start - context_size,
-  deletion_end + context_size
-)
-mutant_context <- str_sub(
-  delta_f508,
-  deletion_start - context_size,
-  deletion_end + context_size
-)
-
-message(
-  paste(
-    "\nHealthy sequence around deletion (positions",
-    deletion_start - context_size,
-    "-",
-    deletion_end + context_size,
-    "):"
-  )
-)
-message(healthy_context)
-message(paste("\nDeltaF508 sequence around deletion site:"))
-message(mutant_context)
+delta_f508 <- delete_dna(cftr_cds, deletion_start, deletion_end)
 
 # Save and format ----
 

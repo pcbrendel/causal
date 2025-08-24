@@ -126,6 +126,56 @@ get_cds <- function(id) {
 
 # Apply deletion ----
 
+delete_dna <- function(dna_seq, start, stop) {
+
+  nucleotides_to_delete <- str_sub(
+    dna_seq, start, stop
+  )
+  message(
+    paste0(
+      "\nNucleotides to be deleted (positions ",
+      start,
+      "-",
+      stop,
+      "): ",
+      nucleotides_to_delete
+    )
+  )
+
+  new_seq <- paste0(
+    str_sub(dna_seq, 1, start - 1),
+    ".", ".", ".",
+    str_sub(dna_seq, stop + 1, -1)
+  )
+
+  # Show the region around the deletion for comparison
+  context_size <- 20
+  healthy_context <- str_sub(
+    dna_seq,
+    start - context_size,
+    stop + context_size
+  )
+  mutant_context <- str_sub(
+    new_seq,
+    start - context_size,
+    stop + context_size
+  )
+  message(
+    paste0(
+      "\nHealthy sequence around deletion (positions ",
+      start - context_size,
+      "-",
+      stop + context_size,
+      "):"
+    )
+  )
+  message(healthy_context)
+  message(paste("\nUpdated sequence around deletion site:"))
+  message(mutant_context)
+
+  return(new_seq)
+}
+
 # Letter plot ----
 
 # Dot plot ----
