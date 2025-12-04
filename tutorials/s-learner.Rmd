@@ -20,6 +20,8 @@ library(themis)
 ```
 
 ```{r}
+summary(df_uc_source)
+
 df <- df_uc_source %>%
   mutate(
     Y_bi = as.factor(Y_bi),
@@ -32,18 +34,18 @@ head(df)
 table(df$Y_bi)
 ```
 
-# 1. Fit outcome model
-
 ```{r}
 # split data
 set.seed(123)
-data_split <- initial_split(df, prop = 0.8, strata = Y_bi)
+data_split <- initial_split(df, prop = 0.8)
 train_data <- training(data_split)
 test_data <- testing(data_split)
 
 table(train_data$Y_bi)
 table(test_data$Y_bi)
 ```
+
+# 1. Fit outcome model on train data
 
 ```{r}
 # create recipe
@@ -54,9 +56,7 @@ model_recipe <- recipe(Y_bi ~ X_bi + C1 + C2 + C3 + U, data = train_data) %>%
 lr_mod <- logistic_reg() %>%
   set_engine("glm") %>%
   set_mode("classification")
-```
 
-```{r}
 # create workflow
 lr_wf <- workflow() %>%
   add_recipe(model_recipe) %>%
@@ -67,12 +67,44 @@ lr_wf <- workflow() %>%
 # fit final model on training data
 final_fit <- fit(lr_wf, train_data)
 
-# Check model summary
+# View model summary
 final_fit %>%
   extract_fit_engine() %>%
   summary()
+```
 
-# evaluate on test data
+            Estimate
+(Intercept) -0.97721
+X_bi1        0.67230
+C1           0.40682
+C2          -0.93421
+C3           0.27922
+U            0.73123
+
+# 2. Compare train vs test performance
+
+```{r}
+# train performance
+train_pred <- predict(final_fit, train_data, type = "prob")
+train_pred_class <- predict(final_fit, train_data, type = "class")
+
+train_results <- train_data %>%
+  select(Y_bi) %>%
+  bind_cols(train_pred) %>%
+  bind_cols(train_pred_class)
+
+# confusion matrix
+conf_mat(train_results, truth = Y_bi, estimate = .pred_class)
+
+# Accuracy and ROC AUC
+accuracy(train_results, truth = Y_bi, estimate = .pred_class)
+roc_auc(train_results, truth = Y_bi, .pred_1, event_level = "second")
+```
+
+Train ROC_AUC = 0.683
+
+```{r}
+# test performance
 test_pred <- predict(final_fit, test_data, type = "prob")
 test_pred_class <- predict(final_fit, test_data, type = "class")
 
@@ -86,18 +118,17 @@ conf_mat(test_results, truth = Y_bi, estimate = .pred_class)
 
 # Accuracy and ROC AUC
 accuracy(test_results, truth = Y_bi, estimate = .pred_class)
-
-# ROC AUC
 roc_auc(test_results, truth = Y_bi, .pred_1, event_level = "second")
 ```
 
-# 2. Obtain CATE
+Test ROC_AUC = 0.683
+
+# 3. Obtain CATE in train data
 
 ```{r}
-# cate computed on full dataset while model was trained on a split
-df_x1 <- df %>%
+df_x1 <- train_data %>%
   mutate(X_bi = factor(1, levels = levels(df$X_bi)))
-df_x0 <- df %>%
+df_x0 <- train_data %>%
   mutate(X_bi = factor(0, levels = levels(df$X_bi)))
 
 pred_prob_x1 <- predict(final_fit, df_x1, type = "prob")$.pred_1
@@ -110,7 +141,9 @@ print(sd(cate))
 print(quantile(cate, c(0.025, 0.975)))
 ```
 
-On average, across all individuals (with their covariate values), treatment (X=1) increases the probability of the outcome (Y=1) by 16.6 percentage points compared to control (X=0).
+Train CATE = 0.155 (0.113, 0.166)
+
+On average, across all individuals (with their covariate values), treatment (X=1) increases the probability of the outcome (Y=1) by 15.5 percentage points compared to control (X=0).
 
 ```{r}
 cate_summary <- tibble(
@@ -161,7 +194,42 @@ ggplot(tibble(cate = cate), aes(x = cate)) +
   )
 ```
 
-# Assess heterogeneity
+# 4. Compare to CATE in test data
 
 ```{r}
+df_x1 <- test_data %>%
+  mutate(X_bi = factor(1, levels = levels(df$X_bi)))
+df_x0 <- test_data %>%
+  mutate(X_bi = factor(0, levels = levels(df$X_bi)))
+
+pred_prob_x1 <- predict(final_fit, df_x1, type = "prob")$.pred_1
+pred_prob_x0 <- predict(final_fit, df_x0, type = "prob")$.pred_1
+
+cate <- pred_prob_x1 - pred_prob_x0
+
+print(mean(cate))
+print(sd(cate))
+print(quantile(cate, c(0.025, 0.975)))
+```
+
+Test CATE = 0.155 (0.113, 0.166)
+
+# 5. Assess heterogeneity
+
+```{r}
+# update CI with bootstrap
+# need to update with separate train/test
+df$cate <- cate
+
+df %>%
+  mutate(cate_group = if_else(cate > median(cate), "High", "Low")) %>%
+  group_by(cate_group) %>%
+  summarize(
+    Y_mean = mean(as.numeric(Y_bi) - 1),
+    X_mean = mean(as.numeric(X_bi) - 1),
+    C1_mean = mean(C1),
+    C2_mean = mean(C2),
+    C3_mean = mean(C3),
+    U_mean = mean(U)
+  )
 ```
