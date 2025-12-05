@@ -17,6 +17,7 @@ library(multibias)
 library(tidyverse)
 library(tidymodels)
 library(themis)
+library(boot)
 ```
 
 ```{r}
@@ -49,8 +50,7 @@ table(test_data$Y_bi)
 
 ```{r}
 # create recipe
-model_recipe <- recipe(Y_bi ~ X_bi + C1 + C2 + C3 + U, data = train_data) %>%
-  step_downsample(Y_bi)
+model_recipe <- recipe(Y_bi ~ X_bi + C1 + C2 + C3 + U, data = train_data)
 
 # specify model
 lr_mod <- logistic_reg() %>%
@@ -72,14 +72,6 @@ final_fit %>%
   extract_fit_engine() %>%
   summary()
 ```
-
-            Estimate
-(Intercept) -0.97721
-X_bi1        0.67230
-C1           0.40682
-C2          -0.93421
-C3           0.27922
-U            0.73123
 
 # 2. Compare train vs test performance
 
@@ -138,20 +130,20 @@ cate <- pred_prob_x1 - pred_prob_x0
 
 print(mean(cate))
 print(sd(cate))
-print(quantile(cate, c(0.025, 0.975)))
+print(quantile(cate, c(0.025, 0.975))) # not confidence interval
 ```
 
-Train CATE = 0.155 (0.113, 0.166)
+Train CATE = 0.102
 
-On average, across all individuals (with their covariate values), treatment (X=1) increases the probability of the outcome (Y=1) by 15.5 percentage points compared to control (X=0).
+On average, across all individuals (with their covariate values), treatment (X=1) increases the probability of the outcome (Y=1) by 10.2 percentage points compared to control (X=0).
 
 ```{r}
-cate_summary <- tibble(
-  mean_cate = mean(cate),
-  sd_cate = sd(cate),
-  q025 = quantile(cate, 0.025),
-  q975 = quantile(cate, 0.975)
-)
+# cate_summary <- tibble(
+#   mean_cate = mean(cate),
+#   sd_cate = sd(cate),
+#   q025 = quantile(cate, 0.025),
+#   q975 = quantile(cate, 0.975)
+# )
 
 ggplot(tibble(cate = cate), aes(x = cate)) +
   geom_histogram(aes(y = after_stat(density)),
@@ -161,27 +153,6 @@ ggplot(tibble(cate = cate), aes(x = cate)) +
     color = "white"
   ) +
   geom_density(color = "darkblue", linewidth = 1) +
-  geom_vline(aes(xintercept = mean_cate, linetype = "Mean CATE"),
-    data = cate_summary,
-    color = "red",
-    linewidth = 1
-  ) +
-  geom_vline(aes(xintercept = q025, linetype = "95% CI"),
-    data = cate_summary,
-    color = "darkgreen",
-    linewidth = 0.8,
-    alpha = 0.7
-  ) +
-  geom_vline(aes(xintercept = q975, linetype = "95% CI"),
-    data = cate_summary,
-    color = "darkgreen",
-    linewidth = 0.8,
-    alpha = 0.7
-  ) +
-  scale_linetype_manual(
-    name = "",
-    values = c("Mean CATE" = "solid", "95% CI" = "dashed")
-  ) +
   labs(
     title = "Distribution of Conditional Average Treatment Effects (CATE)",
     x = "CATE (P(Y=1|X=1,C) - P(Y=1|X=0,C))",
@@ -205,26 +176,105 @@ df_x0 <- test_data %>%
 pred_prob_x1 <- predict(final_fit, df_x1, type = "prob")$.pred_1
 pred_prob_x0 <- predict(final_fit, df_x0, type = "prob")$.pred_1
 
-cate <- pred_prob_x1 - pred_prob_x0
+cate_test <- pred_prob_x1 - pred_prob_x0
 
-print(mean(cate))
-print(sd(cate))
-print(quantile(cate, c(0.025, 0.975)))
+print(mean(cate_test))
+print(sd(cate_test))
+print(quantile(cate_test, c(0.025, 0.975))) # not confidence interval
 ```
 
-Test CATE = 0.155 (0.113, 0.166)
+Test CATE = 0.102
 
-# 5. Assess heterogeneity
+# 5. Bootstrap confidence intervals for mean CATE
+
+To obtain valid confidence intervals for the mean CATE, we need to account for uncertainty in the model parameters. Let's use bootstrap resampling:
 
 ```{r}
-# update CI with bootstrap
-# need to update with separate train/test
-df$cate <- cate
+# Function to compute mean CATE on a bootstrap sample
+cate_boot_fxn <- function(data, indices) {
+  # Get bootstrap sample
+  boot_data <- data[indices, ]
 
-df %>%
+  # Create recipe and workflow (same as before)
+  boot_recipe <- recipe(Y_bi ~ X_bi + C1 + C2 + C3 + U, data = boot_data)
+
+  boot_wf <- workflow() %>%
+    add_recipe(boot_recipe) %>%
+    add_model(lr_mod)
+
+  # Fit model on bootstrap sample
+  boot_fit <- fit(boot_wf, boot_data)
+
+  # Compute CATE for each individual in bootstrap sample
+  boot_x1 <- boot_data %>%
+    mutate(X_bi = factor(1, levels = levels(boot_data$X_bi)))
+  boot_x0 <- boot_data %>%
+    mutate(X_bi = factor(0, levels = levels(boot_data$X_bi)))
+
+  pred_x1 <- predict(boot_fit, boot_x1, type = "prob")$.pred_1
+  pred_x0 <- predict(boot_fit, boot_x0, type = "prob")$.pred_1
+
+  cate_boot <- pred_x1 - pred_x0
+
+  # Return mean CATE
+  return(mean(cate_boot))
+}
+```
+
+```{r}
+# Run bootstrap on training data
+set.seed(123)
+n_reps <- 200
+
+boot_results_train <- boot::boot(
+  data = train_data,
+  statistic = cate_boot_fxn,
+  R = n_reps
+)
+
+boot_ci_train <- boot::boot.ci(boot_results_train, type = "perc")
+
+print(paste("Mean CATE (train):", round(median(boot_results_train$t), 4)))
+print(paste(
+  "95% CI for Mean CATE (train):",
+  round(boot_ci_train$percent[4], 4), "to",
+  round(boot_ci_train$percent[5], 4)
+))
+```
+
+CATE = 0.1017 (95% CI:  0.0958 to 0.1080)
+
+```{r}
+# Run bootstrap on test data
+set.seed(123)
+boot_results_test <- boot::boot(
+  data = test_data,
+  statistic = cate_boot_fxn,
+  R = n_reps
+)
+
+boot_ci_test <- boot.ci(boot_results_test, type = "perc")
+
+print(paste("Mean CATE (test):", round(median(boot_results_test$t), 4)))
+print(paste(
+  "95% CI for Mean CATE (test):",
+  round(boot_ci_test$percent[4], 4), "to",
+  round(boot_ci_test$percent[5], 4)
+))
+```
+
+CATE = 0.1024 (95% CI: 0.0913 to 0.1157)
+
+# 6. Assess heterogeneity
+
+```{r}
+test_data$cate <- cate_test
+
+test_data %>%
   mutate(cate_group = if_else(cate > median(cate), "High", "Low")) %>%
   group_by(cate_group) %>%
   summarize(
+    cate_mean = mean(cate),
     Y_mean = mean(as.numeric(Y_bi) - 1),
     X_mean = mean(as.numeric(X_bi) - 1),
     C1_mean = mean(C1),
@@ -233,3 +283,8 @@ df %>%
     U_mean = mean(U)
   )
 ```
+
+  cate_group cate_mean Y_mean X_mean C1_mean C2_mean C3_mean U_mean
+  <chr>          <dbl>  <dbl>  <dbl>   <dbl>   <dbl>   <dbl>  <dbl>
+1 High          0.134   0.257  0.410   0.501   0       0.803  1
+2 Low           0.0800  0.123  0.275   0.494   0.335   0.802  0.167
