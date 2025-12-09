@@ -16,7 +16,6 @@ knitr::opts_chunk$set(
 library(multibias)
 library(tidyverse)
 library(tidymodels)
-library(themis)
 library(boot)
 ```
 
@@ -135,8 +134,6 @@ print(quantile(cate, c(0.025, 0.975))) # not confidence interval
 
 Train CATE = 0.102
 
-On average, across all individuals (with their covariate values), treatment (X=1) increases the probability of the outcome (Y=1) by 10.2 percentage points compared to control (X=0).
-
 ```{r}
 # cate_summary <- tibble(
 #   mean_cate = mean(cate),
@@ -192,20 +189,17 @@ To obtain valid confidence intervals for the mean CATE, we need to account for u
 ```{r}
 # Function to compute mean CATE on a bootstrap sample
 cate_boot_fxn <- function(data, indices) {
-  # Get bootstrap sample
+
   boot_data <- data[indices, ]
 
-  # Create recipe and workflow (same as before)
   boot_recipe <- recipe(Y_bi ~ X_bi + C1 + C2 + C3 + U, data = boot_data)
 
   boot_wf <- workflow() %>%
     add_recipe(boot_recipe) %>%
     add_model(lr_mod)
 
-  # Fit model on bootstrap sample
   boot_fit <- fit(boot_wf, boot_data)
 
-  # Compute CATE for each individual in bootstrap sample
   boot_x1 <- boot_data %>%
     mutate(X_bi = factor(1, levels = levels(boot_data$X_bi)))
   boot_x0 <- boot_data %>%
@@ -216,7 +210,6 @@ cate_boot_fxn <- function(data, indices) {
 
   cate_boot <- pred_x1 - pred_x0
 
-  # Return mean CATE
   return(mean(cate_boot))
 }
 ```
@@ -234,9 +227,9 @@ boot_results_train <- boot::boot(
 
 boot_ci_train <- boot::boot.ci(boot_results_train, type = "perc")
 
-print(paste("Mean CATE (train):", round(median(boot_results_train$t), 4)))
+print(paste("CATE (train):", round(median(boot_results_train$t), 4)))
 print(paste(
-  "95% CI for Mean CATE (train):",
+  "95% CI for CATE (train):",
   round(boot_ci_train$percent[4], 4), "to",
   round(boot_ci_train$percent[5], 4)
 ))
@@ -255,9 +248,9 @@ boot_results_test <- boot::boot(
 
 boot_ci_test <- boot.ci(boot_results_test, type = "perc")
 
-print(paste("Mean CATE (test):", round(median(boot_results_test$t), 4)))
+print(paste("CATE (test):", round(median(boot_results_test$t), 4)))
 print(paste(
-  "95% CI for Mean CATE (test):",
+  "95% CI for CATE (test):",
   round(boot_ci_test$percent[4], 4), "to",
   round(boot_ci_test$percent[5], 4)
 ))
