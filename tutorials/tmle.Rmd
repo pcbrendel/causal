@@ -1,0 +1,148 @@
+# TMLE
+
+Objective: ATE of the X-Y effect in the df_uc_source dataframe.
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(multibias)
+library(tmle)
+```
+
+```{r}
+df <- df_uc_source |>
+  mutate(
+    Y = Y_bi,
+    X = X_bi
+  ) |>
+  select(-X_bi, -Y_bi, -X_cont, -Y_cont)
+
+head(df)
+```
+
+## With TMLE function
+
+```{r}
+tmle(
+  Y = df$Y,
+  A = df$X,
+  W = df |> select(C1, C2, C3, U),
+  family = "binomial",
+  Q.SL.library = c("SL.glm", "SL.glmnet"),
+  g.SL.library = c("SL.glm", "SL.glmnet")
+)
+# ATE = 0.102, 95% CI = (0.097, 0.108)
+# OR = 1.95, 95% CI = (1.89, 2.02)
+```
+
+Used here:
+* Y: outcome variable
+* A: exposure variable
+* W: covariates
+* family: outcome distribution
+* Q.SL.library: SuperLearner library for outcome model
+* g.SL.library: SuperLearner library for propensity model
+
+Some other useful parameters not used above:
+* Q: an nx2 matrix of predicted outcome probabilities for each observation under each treatment level (column order is A=0, A=1); alternative to using Q.SL.library
+* Z: intermediate covariate; for controlled direct effect estimation
+* Delta: indicator of missing outcome or treatment
+
+
+## Step by Step
+
+### 1. Probability of outcome
+
+```{r}
+# fit outcome model
+
+Q_mod <- glm(
+  Y ~ X + C1 + C2 + C3 + U,
+  data = df,
+  family = "binomial"
+)
+
+# predict in original data
+
+Y_pred_observed <- predict(
+  Q_mod,
+  type = "response"
+)
+
+# predict when exposure = 1
+
+Y_pred_X1 <- predict(
+  Q_mod,
+  newdata = mutate(df, X = 1),
+  type = "response"
+)
+
+# predict when exposure = 0
+
+Y_pred_X0 <- predict(
+  Q_mod,
+  newdata = mutate(df, X = 0),
+  type = "response"
+)
+```
+
+```{r}
+# confirm all predictions are between 0 and 1
+
+all(Y_pred_observed >= 0 & Y_pred_observed <= 1) # TRUE
+all(Y_pred_X1 >= 0 & Y_pred_X1 <= 1) # TRUE
+all(Y_pred_X0 >= 0 & Y_pred_X0 <= 1) # TRUE
+```
+
+### 2. Probability of treatment
+
+```{r}
+# fit treatment model
+
+g_mod <- glm(
+  X ~ C1 + C2 + C3 + U,
+  data = df,
+  family = "binomial"
+)
+
+# inverse probability of treatment
+
+IP_X1_pred <- 1 / predict(
+  g_mod,
+  type = "response"
+)
+
+# negative inverse probabilty of not receiving treatment
+
+IP_X0_pred <- -1 / (1 - predict(
+  g_mod,
+  type = "response"
+))
+```
+
+```{r}
+# clever covariate
+
+df$cc <- ifelse(df$X == 1, IP_X1_pred, IP_X0_pred)
+```
+
+### 3. Fluctuation parameter
+
+```{r}
+eps_mod <- glm(
+  Y ~ -1 + offset(qlogis(Y_pred_observed)) + cc,
+  data = df,
+  family = binomial
+)
+
+fluctuation_param <- coef(eps_mod)[1]
+```
+
+### 4. Effect estimation
+
+```{r}
+```
+
+### 5. Standard errors
+
+```{r}
+```
