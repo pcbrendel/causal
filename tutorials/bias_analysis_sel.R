@@ -81,7 +81,7 @@ correct_results$estimate
 correct_results$ci
 # 2.05 (2.01, 2.07)
 
-# using incorret bias parameters
+# using incorrect bias parameters
 set.seed(1234)
 incorrect_results <- adjust_sel_loop(
   coef_0 = coef(s_model)[1] * 2,

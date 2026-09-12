@@ -84,7 +84,7 @@ correct_results$estimate
 correct_results$ci
 # 2.04 (2.01, 2.08)
 
-# using incorret bias parameters
+# using incorrect bias parameters
 set.seed(1234)
 incorrect_results <- adjust_em_imp_loop(
   coef_0 =     coef(x_model)[1] * 2,
@@ -148,7 +148,7 @@ correct_results$estimate
 correct_results$ci
 # 2.05 (2.04, 2.06)
 
-# using incorret bias parameters
+# using incorrect bias parameters
 set.seed(1234)
 incorrect_results <- adjust_em_wgt_loop(
   coef_0 =     coef(x_model)[1] * 2,
