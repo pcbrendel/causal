@@ -1,7 +1,5 @@
 # TMLE
 
-Objective: ATE of the X-Y effect in the df_uc_source dataframe.
-
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(multibias)
@@ -37,20 +35,6 @@ sqrt(tmle_result$estimates$ATE$var.psi) # std error of ATE estimate
 # ATE = 0.102, 95% CI = (0.097, 0.108), SE = 0.0028
 # OR = 1.95, 95% CI = (1.89, 2.02)
 ```
-
-Used here:
-* Y: outcome variable
-* A: exposure variable
-* W: covariates
-* family: outcome distribution
-* Q.SL.library: SuperLearner library for outcome model
-* g.SL.library: SuperLearner library for propensity model
-
-Some other useful parameters not used above:
-* Q: an nx2 matrix of predicted outcome probabilities for each observation under each treatment level (column order is A=0, A=1); alternative to using Q.SL.library
-* Z: intermediate covariate; for controlled direct effect estimation
-* Delta: indicator of missing outcome or treatment
-
 
 ## Step by Step
 
@@ -177,82 +161,31 @@ influence_curve <- IP_X_pred * (df$Y - Y_pred_X_star) +
 se <- sqrt(var(influence_curve) / nrow(df))
 se
 # SE = 0.0028
+
+ci <- ate + c(-1, 1) * qnorm(0.975) * se
+ci
+# 95% CI = (0.097, 0.108)
 ```
 
 ## Understanding how the targeting works
 
-The efficient influence function (EIF) is the function that captures how
-much a parameter estimate (here, the ATE) would change in response to a
-small perturbation of the data distribution at a single observation.
-It also determines the estimator's asymptotic variance.
-
-The EIF for the ATE is:
-
-D(O) = H(A,W) * (Y - Q̄(A,W)) + [Q̄(1,W) - Q̄(0,W) - ψ]
-
-where:
-* H(A,W) is the clever covariate (`IP_X_pred`)
-* Q̄(A,W) is the predicted outcome (`Y_pred_X_star`)
-* Q̄(1,W) is the predicted outcome under treatment (`Y_pred_X1_star`)
-* Q̄(0,W) is the predicted outcome under control (`Y_pred_X0_star`)
-* ψ is the ATE (`ate`)
-
-A nuisance function is a function that must be estimated along the way
-(here, Q̄ and the treatment-assignment probability g used to build H(A,W))
-but isn't itself the quantity of interest — only the ATE is.
-
-An estimator ψ_hat is asymptotically linear and efficient when the empirical
-mean of D(O), evaluated at the fitted nuisance functions, is (close to)
-zero. That's the "estimating equation" TMLE is built to solve.
-
-Before targeting, there's no reason for that mean to be zero — `Y_pred_X`
-was fit to predict Y well on average, not to zero out this particular
-expression. "Targeting" perturbs `Y_pred_X` just enough, in exactly the
-direction of `IP_X_pred`, to force the first term of D(O) to zero.
-
-This works because `eps_mod` is a canonical-link (logistic) GLM with
-`IP_X_pred` as its only covariate. The normal equations for any
-canonical-link GLM guarantee that, at the MLE,
-`sum(covariate * residual) = 0` exactly. Here that's precisely
-`sum(IP_X_pred * (Y - Y_pred_X_star)) = 0` — the first term of D(O).
-
 ```{r}
 # before targeting, the EIF's residual term is not zero
 
-mean(IP_X_pred * (df$Y - Y_pred_X))
+mean(IP_X_pred * (df$Y - Y_pred_X)) # 0.0005
 
 # after targeting (fluctuating Y_pred_X along IP_X_pred), it is ~0 exactly
 # this is a general property of canonical-link GLM score equations,
 # not something specific to this data
 
-mean(IP_X_pred * (df$Y - Y_pred_X_star))
+mean(IP_X_pred * (df$Y - Y_pred_X_star)) # -3.0e-13
 ```
-
-The second term of D(O), `Q̄(1,W) - Q̄(0,W) - ψ`, is zero on average by
-construction too — `ate` is literally defined as
-`mean(Y_pred_X1_star - Y_pred_X0_star)`. So both pieces of the EIF average
-to zero, which is why `influence_curve` (their sum) should also average to
-~0:
 
 ```{r}
-mean(influence_curve)
+mean(influence_curve) # -3.0e-13
 ```
 
-That's the sense in which TMLE "targets" the initial outcome model: it
-doesn't re-fit Q̄ to improve prediction, it nudges Q̄ along the one
-covariate (the propensity-based clever covariate) needed to solve the
-estimating equation for the parameter we actually care about (the ATE).
-Solving that equation is what gives TMLE its efficiency and
-double-robustness properties.
-
 ## Confirming the double robustness property
-
-TMLE is "doubly robust": ψ_hat is consistent if *either* Q̄ (the outcome
-model) or g (the treatment model, used to build `IP_X_pred`) is correctly
-specified — not necessarily both. We can check this by deliberately
-misspecifying the propensity model (dropping `C3` and `U`) while keeping
-the outcome model (`Q_mod`, already fit above) unchanged, and confirming
-the ATE barely moves:
 
 ```{r}
 # propensity model missing confounders C3 and U
@@ -284,13 +217,9 @@ Y_pred_X0_star_misspec <- plogis(
 
 ate_misspec_g <- mean(Y_pred_X1_star_misspec - Y_pred_X0_star_misspec)
 
-ate          # both models correctly specified
-ate_misspec_g # g misspecified, Q still correct -- nearly identical
+ate # ATE = 0.103 (both models correctly specified)
+ate_misspec_g # ATE = 0.102 (g misspecified, Q still correct)
 ```
-
-As a contrast, if we also break the outcome model (drop `C3` and `U` from
-`Q_mod` too), so that *neither* nuisance function is correctly specified,
-the estimate is no longer protected and shifts noticeably:
 
 ```{r}
 Q_mod_misspec <- glm(
@@ -328,7 +257,8 @@ ate_both_misspec <- mean(
   Y_pred_X1_star_both_misspec - Y_pred_X0_star_both_misspec
 )
 
-ate_both_misspec # both Q and g misspecified -- noticeably biased
+ate # ATE = 0.1026 (both models correctly specified)
+ate_both_misspec # ATE = 0.1256 (both Q and g misspecified - biased)
 ```
 
 ```{r}
@@ -337,4 +267,16 @@ sessionInfo()
 # R version 4.6.1 (2026-06-24)
 # Platform: aarch64-apple-darwin23
 # Running under: macOS Tahoe 26.6.2
+
+# attached base packages:
+# [1] splines   stats     graphics  grDevices utils     datasets  methods
+# [8] base
+
+# other attached packages:
+# [1] tmle_2.1.1          SuperLearner_2.0-41 gam_1.22-7
+# [4] foreach_1.5.2       nnls_1.6            glmnet_5.0
+# [7] Matrix_1.7-5        multibias_1.7.3     lubridate_1.9.5
+# [10] forcats_1.0.1       stringr_1.6.0       dplyr_1.2.1
+# [13] purrr_1.2.2         readr_2.2.0         tidyr_1.3.2
+# [16] tibble_3.3.1        ggplot2_4.0.3       tidyverse_2.0.0
 ```
